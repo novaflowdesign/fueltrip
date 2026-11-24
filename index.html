@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="FuelTrip – policz, ile kosztuje Twoja trasa." />
+    <meta name="theme-color" content="#0f766e" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>FuelTrip</title>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="panel" aria-label="Panel planowania trasy">
+        <header class="panel__header">
+          <h1 class="brand">
+            <span class="brand__mark" aria-hidden="true">⛽</span>
+            FuelTrip
+          </h1>
+          <p class="panel__subtitle">Policz, ile kosztuje Twoja trasa</p>
+        </header>
+        <div class="panel__body" id="panel-body">
+          <!-- Route search, route list, settings and summary come in later stages. -->
+        </div>
+      </aside>
+      <main class="map-wrap">
+        <div id="map" class="map" role="region" aria-label="Mapa"></div>
+      </main>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

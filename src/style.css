@@ -1,0 +1,155 @@
+/* ---------- Design tokens ---------- */
+:root {
+  color-scheme: light dark;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+
+  --color-bg: #f4f6f5;
+  --color-surface: #ffffff;
+  --color-surface-2: #eef2f1;
+  --color-text: #14201d;
+  --color-text-muted: #5b6b67;
+  --color-border: #dde4e2;
+  --color-accent: #0f766e;
+  --color-accent-contrast: #ffffff;
+
+  --radius-lg: 20px;
+  --radius-md: 12px;
+  --shadow-panel: 0 10px 40px rgb(15 30 25 / 0.14), 0 2px 8px rgb(15 30 25 / 0.08);
+
+  --panel-width: 380px;
+  --gap: 16px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #0d1412;
+    --color-surface: #141d1b;
+    --color-surface-2: #1b2624;
+    --color-text: #e6efec;
+    --color-text-muted: #94a6a1;
+    --color-border: #26332f;
+    --color-accent: #2dd4bf;
+    --color-accent-contrast: #062521;
+    --shadow-panel: 0 10px 40px rgb(0 0 0 / 0.5), 0 2px 8px rgb(0 0 0 / 0.35);
+  }
+}
+
+/* ---------- Base ---------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--color-bg);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- Layout ---------- */
+.app {
+  display: grid;
+  grid-template-columns: var(--panel-width) 1fr;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.panel {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+  box-shadow: var(--shadow-panel);
+}
+
+.panel__header {
+  padding: 24px 24px 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.brand__mark {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  font-size: 1.25rem;
+}
+
+.panel__subtitle {
+  margin: 6px 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.95rem;
+}
+
+.panel__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--gap) 24px;
+}
+
+.map-wrap {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+.map {
+  position: absolute;
+  inset: 0;
+}
+
+/* ---------- Mobile (temporary – proper bottom sheet in stage 7) ---------- */
+@media (max-width: 760px) {
+  .app {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr auto;
+  }
+
+  .panel {
+    grid-row: 2;
+    max-height: 45dvh;
+    border-right: none;
+    border-top: 1px solid var(--color-border);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  }
+
+  .panel__header {
+    padding: 16px;
+  }
+
+  .panel__body {
+    padding: 12px 16px;
+  }
+
+  .map-wrap {
+    grid-row: 1;
+  }
+}

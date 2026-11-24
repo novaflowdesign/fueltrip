@@ -3,6 +3,9 @@ import type { RouteResult } from '../services/routing.ts';
 import { formatDuration, formatKm } from '../utils/format.ts';
 
 export interface RouteSummaryOptions {
+  /** Unique prefix for element ids. */
+  idPrefix: string;
+  roundTrip: boolean;
   onRoundTripChange: (roundTrip: boolean) => void;
 }
 
@@ -17,7 +20,7 @@ export interface RouteSummary {
   showError(text: string, onRetry: () => void): void;
 }
 
-/** Card under the search box: distance, driving time and the round-trip toggle. */
+/** Route stats block: distance, driving time and the round-trip toggle. */
 export function createRouteSummary(opts: RouteSummaryOptions): RouteSummary {
   const element = document.createElement('section');
   element.className = 'route-summary';
@@ -31,7 +34,8 @@ export function createRouteSummary(opts: RouteSummaryOptions): RouteSummary {
   // The checkbox element is created once and kept across re-renders so it never loses focus.
   const roundTripInput = document.createElement('input');
   roundTripInput.type = 'checkbox';
-  roundTripInput.id = 'round-trip';
+  roundTripInput.id = `${opts.idPrefix}-round-trip`;
+  roundTripInput.checked = opts.roundTrip;
   roundTripInput.className = 'switch__input';
   const roundTripLabel = document.createElement('label');
   roundTripLabel.className = 'switch';

@@ -13,8 +13,6 @@
   --color-border: #dde4e2;
   --color-accent: #0f766e;
   --color-accent-contrast: #ffffff;
-  --color-start: #16a34a;
-  --color-end: #dc2626;
   --color-danger: #b91c1c;
   --color-focus: rgb(15 118 110 / 0.28);
 
@@ -22,7 +20,7 @@
   --radius-md: 12px;
   --shadow-panel: 0 10px 40px rgb(15 30 25 / 0.14), 0 2px 8px rgb(15 30 25 / 0.08);
 
-  --panel-width: 380px;
+  --panel-width: 400px;
   --gap: 16px;
 }
 
@@ -36,8 +34,6 @@
     --color-border: #26332f;
     --color-accent: #2dd4bf;
     --color-accent-contrast: #062521;
-    --color-start: #22c55e;
-    --color-end: #f87171;
     --color-danger: #fca5a5;
     --color-focus: rgb(45 212 191 / 0.3);
     --shadow-panel: 0 10px 40px rgb(0 0 0 / 0.5), 0 2px 8px rgb(0 0 0 / 0.35);
@@ -85,29 +81,16 @@ body {
 }
 
 .panel__header {
-  padding: 24px 24px 16px;
+  padding: 22px 20px 16px;
   border-bottom: 1px solid var(--color-border);
 }
 
 .brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
   margin: 0;
   font-size: 1.6rem;
   font-weight: 800;
   letter-spacing: -0.02em;
-}
-
-.brand__mark {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-md);
-  background: var(--color-accent);
-  color: var(--color-accent-contrast);
-  font-size: 1.25rem;
+  line-height: 1.2;
 }
 
 .panel__subtitle {
@@ -120,7 +103,7 @@ body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--gap) 24px;
+  padding: var(--gap) 20px 24px;
 }
 
 .map-wrap {
@@ -139,23 +122,17 @@ body {
 /* ---------- Route search ---------- */
 .route-search {
   display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  gap: 8px;
+  gap: 2px;
 }
 
-.route-search__fields {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
+/* Sits between the two inputs, right-aligned on the "Dokąd" label row. */
 .route-search__swap {
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
-  margin-top: 10px; /* visually center against the inputs, not the labels */
+  flex: none;
+  width: 30px;
+  height: 30px;
+  margin: 2px 4px 2px 0;
   border: 1px solid var(--color-border);
   border-radius: 50%;
   background: var(--color-surface);
@@ -283,16 +260,15 @@ body {
 
 /* ---------- Field + combobox ---------- */
 .field {
-  --dot-color: var(--color-text-muted);
   min-width: 0;
 }
 
-.field--start {
-  --dot-color: var(--color-start);
-}
-
-.field--end {
-  --dot-color: var(--color-end);
+.field__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 22px;
 }
 
 .field__label {
@@ -307,24 +283,35 @@ body {
   position: relative;
 }
 
-/* Colored dot in front of the input (start = green, end = red). */
+/* "A" / "B" badge in front of the input – same letters and color as the map markers. */
 .combobox::before {
-  content: '';
+  content: 'A';
   position: absolute;
-  left: 14px;
+  z-index: 1;
+  left: 10px;
   top: 50%;
-  width: 10px;
-  height: 10px;
-  margin-top: -5px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-top: -10px;
   border-radius: 50%;
-  border: 2px solid var(--dot-color);
+  border: 2px solid var(--route-color, var(--color-accent));
   background: var(--color-surface);
+  color: var(--route-color, var(--color-accent));
+  font-size: 0.65rem;
+  font-weight: 800;
   pointer-events: none;
-  transition: background 0.15s;
+  transition: background 0.15s, color 0.15s;
+}
+
+.field--end .combobox::before {
+  content: 'B';
 }
 
 .field.is-selected .combobox::before {
-  background: var(--dot-color);
+  background: var(--route-color, var(--color-accent));
+  color: #fff;
 }
 
 /* Loading spinner on the right. */
@@ -352,7 +339,7 @@ body {
 .combobox__input {
   width: 100%;
   height: 44px;
-  padding: 0 38px 0 36px;
+  padding: 0 38px 0 40px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface-2);
@@ -694,22 +681,416 @@ body {
   color: var(--color-text-muted);
 }
 
+/* ---------- Route list + cards ---------- */
+.route-list {
+  display: grid;
+  /* minmax(0, …) so long one-line texts (collapsed card summary) can't widen the list. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.route-card {
+  --route-color: var(--color-accent);
+  position: relative;
+  min-width: 0;
+  padding: 10px 14px 14px;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04);
+  transition: border-color 0.2s, box-shadow 0.2s;
+  animation: card-in 0.25s ease-out;
+}
+
+/* Colored stripe on the left edge = the route's color on the map. */
+.route-card::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: 14px;
+  bottom: 14px;
+  width: 4px;
+  border-radius: 0 4px 4px 0;
+  background: var(--route-color);
+}
+
+.route-card:hover {
+  border-color: color-mix(in srgb, var(--route-color) 35%, var(--color-border));
+}
+
+.route-card[data-active='true'] {
+  border-color: var(--route-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--route-color) 18%, transparent);
+}
+
+.route-card[data-collapsed='true'] {
+  padding-bottom: 10px;
+}
+
+.route-card__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.route-card[data-collapsed='true'] .route-card__header {
+  margin-bottom: 2px;
+}
+
+.route-card__dot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--route-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--route-color) 20%, transparent);
+}
+
+.route-card__name {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  margin-left: 2px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.route-card__name::placeholder {
+  color: var(--color-text);
+  opacity: 1;
+}
+
+.route-card__name:hover {
+  background: var(--color-surface-2);
+}
+
+.route-card__name:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  background: var(--color-surface-2);
+  box-shadow: 0 0 0 3px var(--color-focus);
+}
+
+.route-card__icon-btn {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.route-card__icon-btn:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+}
+
+.route-card__remove:hover {
+  color: var(--color-danger);
+}
+
+.route-card__icon-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-focus);
+}
+
+.route-card__collapse svg {
+  transition: transform 0.2s;
+}
+
+.route-card__collapse[aria-expanded='false'] svg {
+  transform: rotate(-90deg);
+}
+
+.route-card__compact {
+  display: block;
+  width: 100%;
+  padding: 2px 4px 0 22px;
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.route-card__compact:hover {
+  color: var(--color-text);
+}
+
+.route-card__compact:focus-visible {
+  outline: none;
+  border-radius: 6px;
+  box-shadow: 0 0 0 3px var(--color-focus);
+}
+
+.route-card__body[hidden],
+.route-card__compact[hidden],
+.route-card__cost[hidden] {
+  display: none;
+}
+
+.route-card__consumption {
+  margin-top: 14px;
+}
+
+.route-card__cost {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--color-border);
+  font-size: 0.875rem;
+}
+
+.route-card__cost-label {
+  color: var(--color-text-muted);
+}
+
+.route-card__cost-value {
+  font-weight: 800;
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.route-card__cost[data-state='hint'] .route-card__cost-value {
+  font-weight: 500;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.route-card__cost-liters {
+  margin-left: 4px;
+  font-weight: 500;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+/* Inside a card the stats block sits right under the search fields. */
+.route-card .route-summary {
+  margin-top: 12px;
+}
+
+/* Cards are narrower than the panel – slightly more compact stat tiles. */
+.route-card .stat {
+  padding: 10px 12px;
+}
+
+.route-card .stat__label {
+  font-size: 0.7rem;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.route-card .stat__value {
+  font-size: 1.2rem;
+  white-space: nowrap;
+}
+
+.button--add {
+  width: 100%;
+  height: 44px;
+  margin-top: 12px;
+  border: 1.5px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 0.92rem;
+  gap: 6px;
+}
+
+.button--add:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 6%, transparent);
+}
+
+.button--add span {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+/* ---------- Summary extras ---------- */
+.cost-summary__hint--block {
+  margin-bottom: 10px;
+}
+
+.cost-summary__note {
+  margin: 10px 0 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.cost-summary__show-all {
+  width: 100%;
+  margin-top: 12px;
+}
+
+.breakdown {
+  display: grid;
+  gap: 2px;
+  margin: 12px 0 0;
+  padding: 10px 0 0;
+  border-top: 1px dashed var(--color-border);
+  list-style: none;
+}
+
+.breakdown__item {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  cursor: pointer;
+}
+
+.breakdown__item:hover {
+  background: color-mix(in srgb, var(--color-surface) 70%, transparent);
+}
+
+.breakdown__item:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-focus);
+}
+
+.breakdown__item.is-incomplete {
+  color: var(--color-text-muted);
+}
+
+.breakdown__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--route-color);
+}
+
+.breakdown__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.breakdown__km {
+  color: var(--color-text-muted);
+}
+
+.breakdown__cost {
+  min-width: 72px;
+  font-weight: 700;
+  text-align: right;
+}
+
+/* ---------- Toast ---------- */
+.toast {
+  position: fixed;
+  z-index: 50;
+  left: 24px;
+  bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  max-width: calc(var(--panel-width) - 48px);
+  padding: 10px 10px 10px 16px;
+  border-radius: var(--radius-md);
+  background: var(--color-text);
+  color: var(--color-bg);
+  box-shadow: var(--shadow-panel);
+  font-size: 0.875rem;
+  animation: toast-in 0.25s cubic-bezier(0.34, 1.3, 0.64, 1);
+}
+
+.toast[hidden] {
+  display: none;
+}
+
+.toast__message {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toast__action {
+  flex: none;
+  height: 32px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-bg) 14%, transparent);
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.toast__action:hover {
+  background: color-mix(in srgb, var(--color-bg) 24%, transparent);
+}
+
+.toast__action:focus-visible {
+  outline: 2px solid var(--color-bg);
+  outline-offset: 2px;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
 /* ---------- Map markers ---------- */
 .route-marker {
   width: 32px;
   height: 40px;
   cursor: default;
+  transition: opacity 0.2s;
+}
+
+.route-marker.is-dimmed {
+  opacity: 0.4;
 }
 
 .route-marker__pin {
-  --pin-color: var(--color-start);
   display: grid;
   place-items: center;
   width: 32px;
   height: 32px;
   border: 3px solid #fff;
   border-radius: 50% 50% 50% 0;
-  background: var(--pin-color);
+  background: var(--pin-color, var(--color-accent));
   color: #fff;
   font-size: 0.8rem;
   font-weight: 800;
@@ -717,10 +1098,6 @@ body {
   transform: rotate(-45deg);
   transform-origin: 50% 50%;
   animation: marker-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.route-marker--end .route-marker__pin {
-  --pin-color: var(--color-end);
 }
 
 /* Counter-rotate the letter so it stays upright. */
@@ -774,6 +1151,12 @@ body {
 
 /* ---------- Mobile (temporary – proper bottom sheet in stage 7) ---------- */
 @media (max-width: 760px) {
+  .toast {
+    left: 16px;
+    right: 16px;
+    max-width: none;
+  }
+
   .app {
     grid-template-columns: 1fr;
     grid-template-rows: 1fr auto;

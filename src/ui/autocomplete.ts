@@ -28,6 +28,8 @@ export interface AutocompleteState {
  */
 export class PlaceAutocomplete {
   readonly element: HTMLElement;
+  /** Row holding the label – extra controls (e.g. a swap button) can be appended here. */
+  readonly header: HTMLElement;
 
   private readonly input: HTMLInputElement;
   private readonly list: HTMLUListElement;
@@ -51,6 +53,8 @@ export class PlaceAutocomplete {
     const label = el('label', 'field__label');
     label.htmlFor = inputId;
     label.textContent = opts.label;
+    this.header = el('div', 'field__header');
+    this.header.append(label);
 
     const box = el('div', 'combobox');
 
@@ -79,7 +83,7 @@ export class PlaceAutocomplete {
     this.status.setAttribute('aria-live', 'polite');
 
     box.append(this.input, this.list);
-    this.element.append(label, box, this.status);
+    this.element.append(this.header, box, this.status);
 
     this.input.addEventListener('input', this.handleInput);
     this.input.addEventListener('keydown', this.handleKeydown);

@@ -7,6 +7,9 @@ export interface RouteEndpoints {
 }
 
 export interface RouteSearchOptions {
+  /** Unique prefix so several searches can live on one page. */
+  idPrefix: string;
+  initial: RouteEndpoints;
   search: (query: string, signal: AbortSignal) => Promise<Place[]>;
   onChange: (endpoints: RouteEndpoints) => void;
 }
@@ -14,14 +17,15 @@ export interface RouteSearchOptions {
 export interface RouteSearch {
   element: HTMLElement;
   getEndpoints(): RouteEndpoints;
+  focusFrom(): void;
 }
 
-/** "Skąd" / "Dokąd" search box with a swap button (single route for now). */
+/** "Skąd" / "Dokąd" fields with a swap button between them. */
 export function createRouteSearch(opts: RouteSearchOptions): RouteSearch {
   const emit = (): void => opts.onChange(getEndpoints());
 
   const from = new PlaceAutocomplete({
-    id: 'route-from',
+    id: `${opts.idPrefix}-from`,
     label: 'Skąd',
     placeholder: 'Miejsce startu, np. Gliwice',
     className: 'field--start',
@@ -30,7 +34,7 @@ export function createRouteSearch(opts: RouteSearchOptions): RouteSearch {
   });
 
   const to = new PlaceAutocomplete({
-    id: 'route-to',
+    id: `${opts.idPrefix}-to`,
     label: 'Dokąd',
     placeholder: 'Cel podróży, np. Kraków',
     className: 'field--end',
@@ -38,13 +42,16 @@ export function createRouteSearch(opts: RouteSearchOptions): RouteSearch {
     onSelect: emit,
   });
 
+  from.setState({ text: '', place: opts.initial.from });
+  to.setState({ text: '', place: opts.initial.to });
+
   const swap = document.createElement('button');
   swap.type = 'button';
   swap.className = 'route-search__swap';
   swap.setAttribute('aria-label', 'Zamień miejscami skąd i dokąd');
   swap.title = 'Zamień miejscami';
   swap.innerHTML =
-    '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M7 4v13m0 0-3-3m3 3 3-3M17 20V7m0 0-3 3m3-3 3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M7 4v13m0 0-3-3m3 3 3-3M17 20V7m0 0-3 3m3-3 3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   swap.addEventListener('click', () => {
     const a = from.getState();
     const b = to.getState();
@@ -53,18 +60,17 @@ export function createRouteSearch(opts: RouteSearchOptions): RouteSearch {
     emit();
   });
 
-  const fields = document.createElement('div');
-  fields.className = 'route-search__fields';
-  fields.append(from.element, to.element);
+  // The swap button sits between the two inputs, on the "Dokąd" label row,
+  // so both inputs can use the full width.
+  to.header.append(swap);
 
-  const element = document.createElement('section');
+  const element = document.createElement('div');
   element.className = 'route-search';
-  element.setAttribute('aria-label', 'Wyszukiwanie trasy');
-  element.append(fields, swap);
+  element.append(from.element, to.element);
 
   function getEndpoints(): RouteEndpoints {
     return { from: from.getState().place, to: to.getState().place };
   }
 
-  return { element, getEndpoints };
+  return { element, getEndpoints, focusFrom: () => from.focus() };
 }

@@ -1,31 +1,13 @@
 import { validateConsumption, validatePrice, type FieldResult } from '../calc.ts';
-
-export type FuelType = 'pb95' | 'on' | 'lpg';
-
-export const FUEL_LABELS: Record<FuelType, string> = {
-  pb95: 'Pb95',
-  on: 'ON',
-  lpg: 'LPG',
-};
-
-export interface FuelSettingsValue {
-  consumption: FieldResult;
-  price: FieldResult;
-  fuelType: FuelType;
-}
+import { FUEL_LABELS, type FuelSettingsState, type FuelType } from '../state/store.ts';
 
 export interface FuelSettingsOptions {
-  initial: { consumption: string; price: string; fuelType: FuelType };
-  onChange: (value: FuelSettingsValue) => void;
+  initial: FuelSettingsState;
+  onChange: (patch: Partial<FuelSettingsState>) => void;
 }
 
-export interface FuelSettings {
-  element: HTMLElement;
-  getValue(): FuelSettingsValue;
-}
-
-/** Global fuel settings: consumption, price and fuel type. */
-export function createFuelSettings(opts: FuelSettingsOptions): FuelSettings {
+/** Global fuel settings shared by all routes: consumption, price and fuel type. */
+export function createFuelSettings(opts: FuelSettingsOptions): HTMLElement {
   const element = document.createElement('section');
   element.className = 'panel-section fuel-settings';
   element.setAttribute('aria-labelledby', 'fuel-settings-title');
@@ -35,8 +17,6 @@ export function createFuelSettings(opts: FuelSettingsOptions): FuelSettings {
   title.id = 'fuel-settings-title';
   title.textContent = 'Paliwo';
 
-  const emit = (): void => opts.onChange(getValue());
-
   const consumption = createNumberField({
     id: 'fuel-consumption',
     label: 'Spalanie',
@@ -44,7 +24,7 @@ export function createFuelSettings(opts: FuelSettingsOptions): FuelSettings {
     placeholder: '7,5',
     value: opts.initial.consumption,
     validate: validateConsumption,
-    onInput: emit,
+    onInput: (value) => opts.onChange({ consumption: value }),
   });
 
   const price = createNumberField({
@@ -54,35 +34,36 @@ export function createFuelSettings(opts: FuelSettingsOptions): FuelSettings {
     placeholder: 'np. 6,29',
     value: opts.initial.price,
     validate: validatePrice,
-    onInput: emit,
+    onInput: (value) => opts.onChange({ price: value }),
   });
 
   const fields = document.createElement('div');
   fields.className = 'fuel-settings__fields';
   fields.append(consumption.element, price.element);
 
-  const fuelType = createFuelTypePicker(opts.initial.fuelType, emit);
+  const fuelType = createFuelTypePicker(opts.initial.fuelType, (value) => opts.onChange({ fuelType: value }));
 
-  element.append(title, fields, fuelType.element);
-
-  function getValue(): FuelSettingsValue {
-    return { consumption: consumption.result(), price: price.result(), fuelType: fuelType.value() };
-  }
-
-  return { element, getValue };
+  element.append(title, fields, fuelType);
+  return element;
 }
 
-interface NumberFieldOptions {
+export interface NumberFieldOptions {
   id: string;
   label: string;
   unit: string;
   placeholder: string;
   value: string;
   validate: (input: string) => FieldResult;
-  onInput: () => void;
+  onInput: (value: string) => void;
 }
 
-function createNumberField(opts: NumberFieldOptions): { element: HTMLElement; result: () => FieldResult } {
+export interface NumberField {
+  element: HTMLElement;
+  input: HTMLInputElement;
+}
+
+/** Decimal input with a unit suffix and inline validation message. */
+export function createNumberField(opts: NumberFieldOptions): NumberField {
   const element = document.createElement('div');
   element.className = 'field number-field';
 
@@ -121,10 +102,8 @@ function createNumberField(opts: NumberFieldOptions): { element: HTMLElement; re
   box.append(input, unit);
   element.append(label, box, error);
 
-  const result = (): FieldResult => opts.validate(input.value);
-
   const renderValidity = (): void => {
-    const r = result();
+    const r = opts.validate(input.value);
     const invalid = r.status === 'invalid';
     error.textContent = invalid ? r.error : '';
     input.setAttribute('aria-invalid', String(invalid));
@@ -135,17 +114,14 @@ function createNumberField(opts: NumberFieldOptions): { element: HTMLElement; re
 
   input.addEventListener('input', () => {
     renderValidity();
-    opts.onInput();
+    opts.onInput(input.value);
   });
   renderValidity();
 
-  return { element, result };
+  return { element, input };
 }
 
-function createFuelTypePicker(
-  initial: FuelType,
-  onChange: () => void,
-): { element: HTMLElement; value: () => FuelType } {
+function createFuelTypePicker(initial: FuelType, onChange: (value: FuelType) => void): HTMLElement {
   const fieldset = document.createElement('fieldset');
   fieldset.className = 'segmented';
 
@@ -157,7 +133,7 @@ function createFuelTypePicker(
   const options = document.createElement('div');
   options.className = 'segmented__options';
 
-  const radios = (Object.keys(FUEL_LABELS) as FuelType[]).map((type) => {
+  for (const type of Object.keys(FUEL_LABELS) as FuelType[]) {
     const label = document.createElement('label');
     label.className = 'segmented__option';
 
@@ -167,20 +143,17 @@ function createFuelTypePicker(
     radio.value = type;
     radio.checked = type === initial;
     radio.className = 'segmented__input';
-    radio.addEventListener('change', onChange);
+    radio.addEventListener('change', () => {
+      if (radio.checked) onChange(type);
+    });
 
     const text = document.createElement('span');
     text.textContent = FUEL_LABELS[type];
 
     label.append(radio, text);
     options.append(label);
-    return radio;
-  });
+  }
 
   fieldset.append(options);
-
-  return {
-    element: fieldset,
-    value: () => (radios.find((r) => r.checked)?.value as FuelType | undefined) ?? initial,
-  };
+  return fieldset;
 }

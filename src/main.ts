@@ -1,6 +1,6 @@
 import './style.css';
 import { evaluateTrip, summarizeTrips, validatePrice } from './calc.ts';
-import { createMap } from './map/map.ts';
+import { createMap, resetView } from './map/map.ts';
 import { EndpointMarkers } from './map/markers.ts';
 import { RouteLayers } from './map/routeLayer.ts';
 import { searchPlaces, type Place } from './services/geocoding.ts';
@@ -20,10 +20,13 @@ import {
   type RemovedRoute,
   type TripRoute,
 } from './state/store.ts';
+import { clearState, getStorage, loadState, saveState } from './state/persistence.ts';
+import { createClearAll } from './ui/clearAll.ts';
 import { createFuelSettings } from './ui/fuelSettings.ts';
 import { RouteCard, type RouteCardCallbacks } from './ui/routeCard.ts';
 import { createToaster } from './ui/toast.ts';
 import { createTripsSummary } from './ui/tripsSummary.ts';
+import { debounce } from './utils/debounce.ts';
 
 const mapContainer = document.getElementById('map');
 const panelBody = document.getElementById('panel-body');
@@ -35,7 +38,10 @@ const map = createMap(mapContainer);
 const markers = new EndpointMarkers(map);
 const routeLayers = new RouteLayers(map);
 const routing: RoutingProvider = new OsrmRoutingProvider();
-const store = new Store(createInitialState());
+// localStorage may be unavailable (private mode, blocked cookies) – the app then works in memory only.
+const storage = getStorage();
+const restored = storage ? loadState(storage) : null;
+const store = new Store(restored ?? createInitialState());
 
 /** In-flight routing request per route – a newer request for the same route cancels the old one. */
 const controllers = new Map<string, AbortController>();
@@ -174,7 +180,25 @@ const tripsSummary = createTripsSummary({
 
 const toaster = createToaster(document.body);
 
-panelBody.append(routeList, addButton, fuelSettings, tripsSummary.element);
+const clearAll = createClearAll({ onConfirm: clearEverything });
+
+panelBody.append(routeList, addButton, fuelSettings.element, tripsSummary.element, clearAll);
+
+function clearEverything(): void {
+  for (const controller of controllers.values()) controller.abort();
+  controllers.clear();
+  hoveredId = null;
+
+  const fresh = createInitialState();
+  store.update(() => fresh);
+  fuelSettings.setValues(fresh.settings);
+  // Drop the save scheduled by the update above – storage stays empty until the next real change.
+  saveNow.cancel();
+  if (storage) clearState(storage);
+
+  resetView(map);
+  toaster.show('Wyczyszczono wszystkie trasy i ustawienia.');
+}
 
 // ---------- Render ----------
 
@@ -248,6 +272,49 @@ function applyHighlight(state: AppState): void {
 
 store.subscribe((state) => render(state));
 render(store.get());
+
+// ---------- Persistence ----------
+
+let saveWarningShown = false;
+
+function persist(): void {
+  if (!storage) return;
+  const result = saveState(storage, store.get());
+  if (result === 'failed' && !saveWarningShown) {
+    saveWarningShown = true;
+    toaster.show('Nie udało się zapisać danych w przeglądarce – po odświeżeniu mogą zniknąć.');
+  }
+}
+
+const saveNow = debounce(persist, 300);
+store.subscribe(() => saveNow());
+
+// Flush pending changes when the tab is hidden or closed.
+const flush = (): void => {
+  saveNow.cancel();
+  persist();
+};
+window.addEventListener('pagehide', flush);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') flush();
+});
+
+if (!storage) {
+  toaster.show('Ta przeglądarka nie pozwala zapisać danych – po odświeżeniu trasy znikną.', undefined, 8000);
+}
+
+// Restored session: show all saved routes equally (nothing dimmed) and recalculate
+// the ones saved without a result.
+if (restored) {
+  if (restored.routes.length > 1) store.update((s) => setActiveRoute(s, null));
+  for (const route of restored.routes) {
+    if (route.from && route.to && route.status !== 'ready') void requestRoute(route.id);
+  }
+  if (!routeLayers.fit()) {
+    const withPlaces = restored.routes.find((r) => r.from || r.to);
+    if (withPlaces) markers.frame(withPlaces.id);
+  }
+}
 
 // ---------- Helpers ----------
 

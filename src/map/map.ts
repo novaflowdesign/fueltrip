@@ -1,5 +1,10 @@
-import { AttributionControl, Map as MapLibreMap, NavigationControl, ScaleControl } from 'maplibre-gl';
+import { AttributionControl, Map as MapLibreMap, NavigationControl, ScaleControl, setWorkerUrl } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+// MapLibre resolves its worker as "./maplibre-gl-worker.mjs" next to its own module.
+// After bundling that file doesn't exist, so emit it as an asset and point MapLibre at it.
+import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
+
+setWorkerUrl(workerUrl);
 
 /** OpenFreeMap vector style – free, no API key required. */
 export const MAP_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';

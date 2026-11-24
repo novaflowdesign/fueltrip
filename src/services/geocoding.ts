@@ -73,7 +73,9 @@ export async function searchPlaces(query: string, options: SearchOptions = {}): 
   const q = query.trim();
   const limit = options.limit ?? 5;
 
-  const params = new URLSearchParams({ q, limit: String(limit) });
+  // `lang=default` → local names ("Kraków", "Polska") instead of following the
+  // browser's Accept-Language (an English browser would get "Krakow", "Poland").
+  const params = new URLSearchParams({ q, limit: String(limit), lang: 'default' });
   if (options.near) {
     params.set('lat', options.near.lat.toFixed(4));
     params.set('lon', options.near.lon.toFixed(4));

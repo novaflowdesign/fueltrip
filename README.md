@@ -6,7 +6,7 @@ Wyszukaj trasę „skąd → dokąd”, zobacz ją na mapie i od razu poznaj dys
 
 🔗 **Wersja online:** https://novaflowdesign.github.io/fueltrip/
 
-> Status: etap 5 – wiele tras naraz (własne nazwy, kolory na mapie, osobne spalanie), „Tam i z powrotem”, koszt paliwa i podsumowanie łączne. Zapamiętywanie w przeglądarce w przygotowaniu.
+> Status: etap 6 – wiele tras naraz (nazwy, kolory, osobne spalanie), „Tam i z powrotem”, koszt paliwa, podsumowanie łączne i zapamiętywanie w przeglądarce. Dopracowanie animacji i wersji mobilnej w przygotowaniu.
 
 ## Stack
 
@@ -44,6 +44,7 @@ src/
   main.ts                # start aplikacji
   calc.ts                # czysta logika obliczeń kosztu (+ calc.test.ts)
   state/store.ts         # stan aplikacji: trasy, ustawienia (+ store.test.ts)
+  state/persistence.ts   # zapis/odczyt w localStorage (+ persistence.test.ts)
   map/map.ts             # inicjalizacja MapLibre
   map/markers.ts         # markery startu/celu + kadrowanie mapy
   map/routeLayer.ts      # linie tras (kolor per trasa), animacja, podświetlanie
@@ -56,6 +57,7 @@ src/
   ui/fuelSettings.ts     # globalne spalanie, cena, rodzaj paliwa
   ui/tripsSummary.ts     # podsumowanie wszystkich tras
   ui/toast.ts            # powiadomienie „Usunięto · Cofnij”
+  ui/clearAll.ts         # „Wyczyść wszystko” z potwierdzeniem
   utils/debounce.ts
   utils/format.ts        # formatowanie km, zł, litrów i czasu po polsku
   style.css              # style + zmienne kolorów (jasny/ciemny motyw)
@@ -77,3 +79,9 @@ koszt = km_łącznie × spalanie / 100 × cena
 - Każda trasa może mieć własne spalanie (np. inne auto); puste pole = spalanie z sekcji „Paliwo”.
 - Suma w podsumowaniu to suma kosztów poszczególnych tras (każdy zaokrąglony do grosza), więc rozbicie zawsze się zgadza.
 - Pola liczbowe przyjmują przecinek i kropkę (`7,5` lub `7.5`).
+
+## Dane w przeglądarce
+
+Trasy i ustawienia są zapisywane wyłącznie lokalnie, w `localStorage` przeglądarki (klucz `fueltrip:v1`) – nic nie trafia na żaden serwer.
+Wyznaczone trasy też są zapamiętywane, więc po odświeżeniu pojawiają się od razu, bez ponownego pytania serwera tras.
+Przycisk „Wyczyść wszystko” na dole panelu usuwa wszystkie zapisane dane.

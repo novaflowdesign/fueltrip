@@ -6,13 +6,14 @@ Wyszukaj trasę „skąd → dokąd”, zobacz ją na mapie i od razu poznaj dys
 
 🔗 **Wersja online:** https://novaflowdesign.github.io/fueltrip/
 
-> Status: etap 1 – szkielet aplikacji z mapą. Kolejne funkcje (wyszukiwarka, routing, kalkulator kosztów) w przygotowaniu.
+> Status: etap 2 – wyszukiwarka „Skąd → Dokąd” z podpowiedziami adresów i markerami na mapie. Wyznaczanie trasy i kalkulator kosztów w przygotowaniu.
 
 ## Stack
 
 - [Vite](https://vite.dev/) + TypeScript (vanilla, bez frameworka)
 - [MapLibre GL JS](https://maplibre.org/) – wektorowa mapa
 - [OpenFreeMap](https://openfreemap.org/) – darmowe kafelki mapy (bez klucza API)
+- [Photon](https://photon.komoot.io/) – podpowiedzi adresów (geokodowanie)
 - Hosting: GitHub Pages (deploy przez GitHub Actions)
 
 Aplikacja jest w pełni statyczna – nie ma backendu ani kluczy API w repozytorium.
@@ -38,13 +39,18 @@ Jednorazowa konfiguracja: **Settings → Pages → Build and deployment → Sour
 
 ```
 src/
-  main.ts        # start aplikacji
-  map/map.ts     # inicjalizacja MapLibre
-  style.css      # style + zmienne kolorów (jasny/ciemny motyw)
+  main.ts                # start aplikacji
+  map/map.ts             # inicjalizacja MapLibre
+  map/markers.ts         # markery startu/celu + kadrowanie mapy
+  services/geocoding.ts  # Photon – wyszukiwanie miejsc
+  ui/autocomplete.ts     # pole z podpowiedziami (klawiatura, ARIA)
+  ui/routeSearch.ts      # pola „Skąd” / „Dokąd” + zamiana ⇅
+  utils/debounce.ts
+  style.css              # style + zmienne kolorów (jasny/ciemny motyw)
 ```
 
 Pełna specyfikacja projektu: [CLAUDE.md](CLAUDE.md).
 
 ## Atrybucja
 
-Dane mapy © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors, kafelki [OpenFreeMap](https://openfreemap.org/).
+Dane mapy © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors, kafelki [OpenFreeMap](https://openfreemap.org/), geokodowanie [Photon](https://photon.komoot.io/) (komoot).

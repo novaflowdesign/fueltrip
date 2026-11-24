@@ -3,7 +3,9 @@ import { createMap } from './map/map.ts';
 import { EndpointMarkers } from './map/markers.ts';
 import { RouteLayer } from './map/routeLayer.ts';
 import { searchPlaces, type Place } from './services/geocoding.ts';
-import { OsrmRoutingProvider, RoutingError, type RoutingProvider } from './services/routing.ts';
+import { OsrmRoutingProvider, RoutingError, type RouteResult, type RoutingProvider } from './services/routing.ts';
+import { createCostSummary } from './ui/costSummary.ts';
+import { createFuelSettings } from './ui/fuelSettings.ts';
 import { createRouteSearch, type RouteEndpoints } from './ui/routeSearch.ts';
 import { createRouteSummary } from './ui/routeSummary.ts';
 
@@ -17,15 +19,40 @@ const map = createMap(mapContainer);
 const markers = new EndpointMarkers(map);
 const routeLayer = new RouteLayer(map);
 const routing: RoutingProvider = new OsrmRoutingProvider();
-const summary = createRouteSummary();
 
 let routeController: AbortController | null = null;
+let currentRoute: RouteResult | null = null;
+let roundTrip = false;
+
+const summary = createRouteSummary({
+  onRoundTripChange: (value) => {
+    roundTrip = value;
+    renderCost();
+  },
+});
+
+const fuelSettings = createFuelSettings({
+  initial: { consumption: '7,5', price: '', fuelType: 'pb95' },
+  onChange: () => renderCost(),
+});
+
+const costSummary = createCostSummary();
+
+function renderCost(): void {
+  costSummary.update({ route: currentRoute, roundTrip, settings: fuelSettings.getValue() });
+}
+
+function setRoute(route: RouteResult | null): void {
+  currentRoute = route;
+  renderCost();
+}
 
 async function updateRoute({ from, to }: RouteEndpoints): Promise<void> {
   // A newer selection always wins over an in-flight request.
   routeController?.abort();
   routeController = null;
   routeLayer.clear();
+  setRoute(null);
 
   if (!from || !to) {
     summary.showIdle('Wybierz miejsce startu i cel podróży.');
@@ -45,6 +72,7 @@ async function updateRoute({ from, to }: RouteEndpoints): Promise<void> {
     const route = await routing.getRoute([from, to], controller.signal);
     if (controller.signal.aborted) return;
     summary.showRoute(route);
+    setRoute(route);
     void routeLayer.show(route.geometry);
   } catch (err) {
     if (controller.signal.aborted) return;
@@ -66,7 +94,7 @@ const routeSearch = createRouteSearch({
   },
 });
 
-panelBody.append(routeSearch.element, summary.element);
+panelBody.append(routeSearch.element, summary.element, fuelSettings.element, costSummary.element);
 void updateRoute(routeSearch.getEndpoints());
 
 function isSamePlace(a: Place, b: Place): boolean {

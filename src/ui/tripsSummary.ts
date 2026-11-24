@@ -215,7 +215,7 @@ function breakdown(items: SummaryItem[], onSelect: (id: string) => void): HTMLEl
     dot.setAttribute('aria-hidden', 'true');
     button.append(
       dot,
-      text('span', 'breakdown__name', item.name),
+      nameCell(item.name, e.distance?.times ?? 1),
       text('span', 'breakdown__km', e.distance ? formatKm(e.distance.totalKm) : '—'),
       text('span', 'breakdown__cost', e.cost !== null ? formatCurrency(e.cost) : '—'),
     );
@@ -225,6 +225,18 @@ function breakdown(items: SummaryItem[], onSelect: (id: string) => void): HTMLEl
     list.append(li);
   }
   return list;
+}
+
+/** Route name (ellipsized) + a "×3" badge that never gets cut off. */
+function nameCell(name: string, times: number): HTMLElement {
+  const cell = text('span', 'breakdown__name', '');
+  cell.append(text('span', 'breakdown__name-text', name));
+  if (times > 1) {
+    const badge = text('span', 'breakdown__times', `×${times}`);
+    badge.title = `${times} razy`;
+    cell.append(badge);
+  }
+  return cell;
 }
 
 /** Polish plural: 1 trasa, 2–4 trasy, 5+ tras (12–14 → tras). */

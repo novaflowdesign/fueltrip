@@ -59,6 +59,8 @@ export interface TripCostInput {
   /** One-way driving distance in kilometers (as returned by routing). */
   distanceKm: number;
   roundTrip: boolean;
+  /** How many times the trip is driven (default 1). */
+  times?: number;
   /** Liters per 100 km. */
   consumption: number;
   /** PLN per liter. */
@@ -74,25 +76,36 @@ export interface TripCost extends TripDistance {
 export interface TripDistance {
   /** One-way distance rounded to 0.1 km – exactly what the UI displays. */
   oneWayKm: number;
-  /** 1 or 2. */
+  /** 1 or 2 (round trip). */
   multiplier: number;
-  /** oneWayKm × multiplier. */
+  /** How many times the trip is driven (1–365). */
+  times: number;
+  /** oneWayKm × multiplier × times. */
   totalKm: number;
 }
 
-export function tripDistance(distanceKm: number, roundTrip: boolean): TripDistance {
-  // Round the one-way distance first so the displayed "245,3 km × 2 = 490,6 km" always adds up.
+export const TIMES_RANGE = { min: 1, max: 365 } as const;
+
+/** Clamp a repeat count to 1–365 whole trips (anything invalid → 1). */
+export function clampTimes(times: number): number {
+  if (!Number.isFinite(times)) return TIMES_RANGE.min;
+  return Math.min(TIMES_RANGE.max, Math.max(TIMES_RANGE.min, Math.round(times)));
+}
+
+export function tripDistance(distanceKm: number, roundTrip: boolean, times = 1): TripDistance {
+  // Round the one-way distance first so the displayed "245,3 km × 2 × 3 = 1 471,8 km" always adds up.
   const oneWayKm = round(distanceKm, 1);
   const multiplier = roundTrip ? 2 : 1;
-  return { oneWayKm, multiplier, totalKm: round(oneWayKm * multiplier, 1) };
+  const n = clampTimes(times);
+  return { oneWayKm, multiplier, times: n, totalKm: round(oneWayKm * multiplier * n, 1) };
 }
 
 /** koszt = km_łącznie × spalanie / 100 × cena */
-export function computeTripCost({ distanceKm, roundTrip, consumption, price }: TripCostInput): TripCost {
-  const { oneWayKm, multiplier, totalKm } = tripDistance(distanceKm, roundTrip);
-  const liters = (totalKm * consumption) / 100;
+export function computeTripCost({ distanceKm, roundTrip, times = 1, consumption, price }: TripCostInput): TripCost {
+  const distance = tripDistance(distanceKm, roundTrip, times);
+  const liters = (distance.totalKm * consumption) / 100;
   const cost = round(liters * price, 2);
-  return { oneWayKm, multiplier, totalKm, liters, cost };
+  return { ...distance, liters, cost };
 }
 
 function round(value: number, decimals: number): number {
@@ -110,6 +123,8 @@ export interface TripInput {
   /** One-way distance in km, or null when the route isn't calculated yet. */
   distanceKm: number | null;
   roundTrip: boolean;
+  /** How many times the trip is driven (default 1). */
+  times?: number;
   /** Consumption of the car used (raw input, l/100 km). */
   consumption: string;
   fuelType: Fuel;
@@ -132,7 +147,7 @@ export interface TripEvaluation {
 export function evaluateTrip(input: TripInput): TripEvaluation {
   const consumption = validateConsumption(input.consumption);
   const price = validatePrice(input.price);
-  const distance = input.distanceKm === null ? null : tripDistance(input.distanceKm, input.roundTrip);
+  const distance = input.distanceKm === null ? null : tripDistance(input.distanceKm, input.roundTrip, input.times);
 
   let liters: number | null = null;
   let cost: number | null = null;
@@ -140,6 +155,7 @@ export function evaluateTrip(input: TripInput): TripEvaluation {
     const full = computeTripCost({
       distanceKm: input.distanceKm ?? 0,
       roundTrip: input.roundTrip,
+      times: input.times,
       consumption: consumption.value,
       price: price.status === 'ok' ? price.value : 0,
     });

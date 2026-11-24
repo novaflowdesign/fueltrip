@@ -19,6 +19,7 @@ export interface RouteCardCallbacks {
   search: (query: string, signal: AbortSignal) => Promise<Place[]>;
   onEndpointsChange: (id: string, endpoints: RouteEndpoints) => void;
   onRoundTripChange: (id: string, roundTrip: boolean) => void;
+  onTimesChange: (id: string, times: number) => void;
   onNameChange: (id: string, name: string) => void;
   onConsumptionChange: (id: string, value: string) => void;
   /** null = default car, CUSTOM_CAR = one-off consumption, otherwise a car id. */
@@ -137,6 +138,8 @@ export class RouteCard {
       idPrefix: prefix,
       roundTrip: route.roundTrip,
       onRoundTripChange: (value) => cb.onRoundTripChange(this.id, value),
+      times: route.times,
+      onTimesChange: (value) => cb.onTimesChange(this.id, value),
     });
 
     // Car choice: profiles from "Auta i paliwo" or a one-off consumption.
@@ -211,6 +214,7 @@ export class RouteCard {
     this.compact.hidden = !route.collapsed;
     this.compact.textContent = compactLine(route, evaluation);
 
+    this.summary.setTimes(route.times);
     this.renderCarSelect(route, ctx);
     this.renderStatus(route);
     this.renderCost(evaluation, ctx.resolved);
@@ -286,7 +290,7 @@ export class RouteCard {
 
     const label = document.createElement('span');
     label.className = 'route-card__cost-label';
-    label.textContent = 'Koszt tej trasy';
+    label.textContent = e.distance.times > 1 ? `Koszt tej trasy (${e.distance.times} razy)` : 'Koszt tej trasy';
 
     const value = document.createElement('span');
     value.className = 'route-card__cost-value';
@@ -319,7 +323,11 @@ function compactLine(route: TripRoute, e: TripEvaluation): string {
   const middle =
     stops.length === 0 ? [] : stops.length <= 2 ? stops : [`${stops.length} ${stops.length < 5 ? 'przystanki' : 'przystanków'}`];
   const parts = [[route.from?.name ?? '…', ...middle, route.to?.name ?? '…'].join(' → ')];
-  if (e.distance) parts.push(formatKm(e.distance.totalKm) + (route.roundTrip ? ' (×2)' : ''));
+  if (e.distance) {
+    // "(×2)" for there and back, "· 3 razy" for repeated trips.
+    const factors = [route.roundTrip ? '×2' : '', e.distance.times > 1 ? `${e.distance.times} razy` : ''].filter(Boolean);
+    parts.push(formatKm(e.distance.totalKm) + (factors.length ? ` (${factors.join(', ')})` : ''));
+  }
   if (e.cost !== null) parts.push(formatCurrency(e.cost));
   return parts.join(' · ');
 }

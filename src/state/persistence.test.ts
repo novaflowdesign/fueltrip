@@ -168,6 +168,23 @@ describe('robust loading', () => {
   });
 });
 
+describe('times (repeat count)', () => {
+  it('round-trips, clamps and defaults to 1 for older or invalid data', () => {
+    const storage = new MemoryStorage();
+    saveState(storage, updateRoute(sampleState(), 'id1', { times: 5 }));
+    expect(loadState(storage, ids())!.routes.map((r) => r.times)).toEqual([5, 1]);
+
+    const raw = JSON.parse(storage.getItem(STORAGE_KEY)!);
+    delete raw.routes[0].times;
+    raw.routes[1].times = 'often';
+    expect(deserialize(JSON.stringify(raw), ids())!.routes.map((r) => r.times)).toEqual([1, 1]);
+
+    raw.routes[0].times = 9999;
+    raw.routes[1].times = 0;
+    expect(deserialize(JSON.stringify(raw), ids())!.routes.map((r) => r.times)).toEqual([365, 1]);
+  });
+});
+
 describe('people count', () => {
   it('round-trips and defaults to 1 for older or invalid data', () => {
     const storage = new MemoryStorage();

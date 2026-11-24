@@ -3,6 +3,7 @@
  * Every read and write is guarded: private mode, blocked storage, a full quota or
  * corrupted data must never break the app – it just starts fresh.
  */
+import { clampTimes } from '../calc.ts';
 import type { Place } from '../services/geocoding.ts';
 import type { RouteResult } from '../services/routing.ts';
 import {
@@ -37,6 +38,7 @@ interface StoredRoute {
   to: Place | null;
   stops: Array<{ id: string; place: Place | null }>;
   roundTrip: boolean;
+  times: number;
   carId: string | null;
   consumption: string;
   collapsed: boolean;
@@ -85,6 +87,7 @@ export function serialize(state: AppState, withGeometry: boolean): StoredState {
       to: r.to,
       stops: r.stops,
       roundTrip: r.roundTrip,
+      times: r.times,
       carId: r.carId,
       consumption: r.consumption,
       collapsed: r.collapsed,
@@ -196,6 +199,8 @@ function parseRoute(item: unknown, index: number, makeId: IdFactory, carIds: Set
     to,
     stops: parseStops(item.stops),
     roundTrip: item.roundTrip === true,
+    // Older saves have no repeat count → driven once.
+    times: typeof item.times === 'number' ? clampTimes(item.times) : 1,
     carId: parseCarId(item, carIds),
     consumption: typeof item.consumption === 'string' ? item.consumption.slice(0, 20) : '',
     collapsed: item.collapsed === true,

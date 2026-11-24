@@ -181,6 +181,7 @@ const callbacks: RouteCardCallbacks = {
     if (key(prev) !== key(next) || next.status === 'idle' || next.status === 'error') void requestRoute(id);
   },
   onRoundTripChange: (id, roundTrip) => store.update((s) => updateRoute(s, id, { roundTrip })),
+  onTimesChange: (id, times) => store.update((s) => updateRoute(s, id, { times })),
   onNameChange: (id, name) => store.update((s) => updateRoute(s, id, { name })),
   onConsumptionChange: (id, consumption) => store.update((s) => updateRoute(s, id, { consumption })),
   onCarChange: (id, carId) => store.update((s) => updateRoute(s, id, { carId })),
@@ -284,6 +285,7 @@ function render(state: AppState): void {
     evaluateTrip({
       distanceKm: route.status === 'ready' && route.result ? route.result.distanceMeters / 1000 : null,
       roundTrip: route.roundTrip,
+      times: route.times,
       consumption: resolved[i]!.consumption,
       fuelType: resolved[i]!.fuelType,
       price: state.settings.prices[resolved[i]!.fuelType],

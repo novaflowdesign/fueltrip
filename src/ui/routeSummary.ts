@@ -1,4 +1,4 @@
-import { tripDistance } from '../calc.ts';
+import { clampTimes, TIMES_RANGE, tripDistance } from '../calc.ts';
 import type { RouteResult } from '../services/routing.ts';
 import { formatDuration, formatKm } from '../utils/format.ts';
 import { animatedNumber } from './countUp.ts';
@@ -8,6 +8,8 @@ export interface RouteSummaryOptions {
   idPrefix: string;
   roundTrip: boolean;
   onRoundTripChange: (roundTrip: boolean) => void;
+  times: number;
+  onTimesChange: (times: number) => void;
 }
 
 export interface RouteSummary {
@@ -19,9 +21,11 @@ export interface RouteSummary {
   /** Non-error notice (e.g. start = end). */
   showMessage(text: string): void;
   showError(text: string, onRetry: () => void): void;
+  /** Sync the repeat count from the state (skipped while the user is typing in it). */
+  setTimes(times: number): void;
 }
 
-/** Route stats block: distance, driving time and the round-trip toggle. */
+/** Route stats block: distance, driving time, the round-trip toggle and the repeat count. */
 export function createRouteSummary(opts: RouteSummaryOptions): RouteSummary {
   const element = document.createElement('section');
   element.className = 'route-summary';
@@ -49,21 +53,34 @@ export function createRouteSummary(opts: RouteSummaryOptions): RouteSummary {
   roundTripLabel.append(roundTripInput, track, text);
 
   let route: RouteResult | null = null;
+  let times = clampTimes(opts.times);
 
   roundTripInput.addEventListener('change', () => {
     renderStats();
     opts.onRoundTripChange(roundTripInput.checked);
   });
 
+  const timesControl = createTimesStepper(`${opts.idPrefix}-times`, times, (value) => {
+    if (value === times) return;
+    times = value;
+    renderStats();
+    opts.onTimesChange(value);
+  });
+
+  const options = div('route-summary__options');
+  options.append(roundTripLabel, timesControl.element);
+
   function renderStats(): void {
     if (!route) return;
-    const { oneWayKm, multiplier, totalKm } = tripDistance(route.distanceMeters / 1000, roundTripInput.checked);
+    const { oneWayKm, multiplier, totalKm } = tripDistance(route.distanceMeters / 1000, roundTripInput.checked, times);
     const roundTrip = multiplier === 2;
+    const repeated = times > 1;
 
     stats.replaceChildren(
-      stat(roundTrip ? 'Dystans łącznie' : 'Dystans', animatedNumber(`${opts.idPrefix}-km`, totalKm, formatKm)),
+      stat(roundTrip || repeated ? 'Dystans łącznie' : 'Dystans', animatedNumber(`${opts.idPrefix}-km`, totalKm, formatKm)),
+      // Driving time is for one trip (there and back if checked) – summed over days it would mean little.
       stat(
-        roundTrip ? 'Czas łącznie' : 'Czas przejazdu',
+        roundTrip ? (repeated ? 'Czas tam i z powrotem' : 'Czas łącznie') : 'Czas przejazdu',
         animatedNumber(
           `${opts.idPrefix}-min`,
           (roundToMinute(route.durationSeconds) / 60) * multiplier,
@@ -71,8 +88,10 @@ export function createRouteSummary(opts: RouteSummaryOptions): RouteSummary {
         ),
       ),
     );
-    formula.textContent = roundTrip ? `${formatKm(oneWayKm)} × 2 = ${formatKm(totalKm)}` : '';
-    formula.hidden = !roundTrip;
+    // e.g. "245,3 km × 2 × 3 = 1 471,8 km" (3 = number of times).
+    const factors = [roundTrip ? '× 2' : '', repeated ? `× ${times} ${timesWord(times)}` : ''].filter(Boolean);
+    formula.textContent = factors.length ? `${formatKm(oneWayKm)} ${factors.join(' ')} = ${formatKm(totalKm)}` : '';
+    formula.hidden = factors.length === 0;
   }
 
   const setState = (state: string, ...children: Node[]): void => {
@@ -99,7 +118,7 @@ export function createRouteSummary(opts: RouteSummaryOptions): RouteSummary {
     showRoute(newRoute) {
       route = newRoute;
       renderStats();
-      setState('ready', stats, formula, roundTripLabel);
+      setState('ready', stats, formula, options);
     },
 
     showMessage(message) {
@@ -118,6 +137,112 @@ export function createRouteSummary(opts: RouteSummaryOptions): RouteSummary {
       const error = paragraph('route-summary__error', message);
       error.setAttribute('role', 'alert');
       setState('error', error, retry);
+    },
+
+    setTimes(value) {
+      const n = clampTimes(value);
+      timesControl.setValue(n);
+      if (n === times) return;
+      times = n;
+      renderStats();
+    },
+  };
+}
+
+/** Polish plural: 1 raz, 2+ razy. */
+function timesWord(n: number): string {
+  return n === 1 ? 'raz' : 'razy';
+}
+
+/**
+ * "Ile razy: − N +" – how many times the trip is driven.
+ * The number can also be typed (e.g. 20 working days); arrows ↑/↓ step by one.
+ */
+function createTimesStepper(
+  id: string,
+  initial: number,
+  onChange: (times: number) => void,
+): { element: HTMLElement; setValue: (times: number) => void } {
+  const element = div('times');
+
+  const label = document.createElement('label');
+  label.className = 'times__label';
+  label.htmlFor = id;
+  label.textContent = 'Ile razy';
+
+  const stepper = div('stepper stepper--small');
+  const minus = document.createElement('button');
+  const plus = document.createElement('button');
+  for (const [button, symbol, aria] of [
+    [minus, '−', 'Jeden raz mniej'],
+    [plus, '+', 'Jeden raz więcej'],
+  ] as const) {
+    button.type = 'button';
+    button.className = 'stepper__btn';
+    button.textContent = symbol;
+    button.setAttribute('aria-label', aria);
+    button.setAttribute('aria-controls', id);
+  }
+
+  const input = document.createElement('input');
+  Object.assign(input, {
+    id,
+    type: 'text',
+    inputMode: 'numeric',
+    autocomplete: 'off',
+    spellcheck: false,
+    maxLength: 3,
+    className: 'stepper__input',
+  });
+  input.setAttribute('aria-label', 'Ile razy przejeżdżasz tę trasę');
+
+  stepper.append(minus, input, plus);
+  element.append(label, stepper);
+
+  let current = initial;
+  const render = (): void => {
+    input.value = String(current);
+    minus.disabled = current <= TIMES_RANGE.min;
+    plus.disabled = current >= TIMES_RANGE.max;
+  };
+  const commit = (value: number): void => {
+    current = clampTimes(value);
+    render();
+    onChange(current);
+  };
+
+  minus.addEventListener('click', () => commit(current - 1));
+  plus.addEventListener('click', () => commit(current + 1));
+  input.addEventListener('input', () => {
+    // Keep digits only; apply valid numbers right away, empty is fixed on blur.
+    const digits = input.value.replace(/\D/g, '');
+    if (digits !== input.value) input.value = digits;
+    const n = Number(digits);
+    if (digits && n >= TIMES_RANGE.min) {
+      current = clampTimes(n);
+      minus.disabled = current <= TIMES_RANGE.min;
+      plus.disabled = current >= TIMES_RANGE.max;
+      onChange(current);
+    }
+  });
+  input.addEventListener('blur', render);
+  input.addEventListener('focus', () => input.select());
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      commit(current + (e.key === 'ArrowUp' ? 1 : -1));
+    } else if (e.key === 'Enter' || e.key === 'Escape') {
+      input.blur();
+    }
+  });
+  render();
+
+  return {
+    element,
+    setValue(value) {
+      if (value === current) return;
+      current = value;
+      if (document.activeElement !== input) render();
     },
   };
 }

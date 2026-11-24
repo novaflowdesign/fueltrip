@@ -41,6 +41,8 @@ export interface TripRoute {
   /** Intermediate stops in order (empty fields are kept in the UI but ignored for routing). */
   stops: RouteStop[];
   roundTrip: boolean;
+  /** How many times the trip is driven, e.g. 3 days to work (1–365). */
+  times: number;
   /** Car profile id; null = the default car; CUSTOM_CAR = one-off consumption below. */
   carId: string | null;
   /** Consumption typed for CUSTOM_CAR (raw input). */
@@ -141,6 +143,7 @@ function newRoute(number: number, colorIndex: number, id: string): TripRoute {
     to: null,
     stops: [],
     roundTrip: false,
+    times: 1,
     carId: null,
     consumption: '',
     collapsed: false,
@@ -227,7 +230,7 @@ export function restoreRoute(state: AppState, removed: RemovedRoute): AppState {
 }
 
 function isPristine(route: TripRoute | undefined): boolean {
-  return !!route && !route.from && !route.to && !route.name.trim() && !route.consumption.trim();
+  return !!route && !route.from && !route.to && !route.name.trim() && !route.consumption.trim() && route.times === 1;
 }
 
 export function updateRoute(state: AppState, id: string, patch: Partial<Omit<TripRoute, 'id'>>): AppState {

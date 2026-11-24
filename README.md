@@ -6,7 +6,7 @@ Wyszukaj trasę „skąd → dokąd”, zobacz ją na mapie i od razu poznaj dys
 
 🔗 **Wersja online:** https://novaflowdesign.github.io/fueltrip/
 
-> Status: wszystkie etapy z planu gotowe – wiele tras z przystankami, profile aut z cenami paliw, „Tam i z powrotem”, podział kosztu na osoby, zapamiętywanie w przeglądarce, jasny/ciemny motyw, animacje i wersja mobilna.
+> Status: wszystkie etapy z planu gotowe – wiele tras z przystankami, profile aut z cenami paliw, „Tam i z powrotem”, liczba przejazdów (np. dojazdy do pracy), podział kosztu na osoby, zapamiętywanie w przeglądarce, jasny/ciemny motyw, animacje i wersja mobilna.
 
 ## Stack
 
@@ -55,7 +55,7 @@ src/
   ui/autocomplete.ts     # pole z podpowiedziami (klawiatura, ARIA)
   ui/routeSearch.ts      # „Skąd” / przystanki / „Dokąd” + odwracanie ⇅
   ui/routeCard.ts        # karta trasy: nazwa, zwijanie, usuwanie, wybór auta, koszt
-  ui/routeSummary.ts     # dystans, czas i „Tam i z powrotem” w karcie
+  ui/routeSummary.ts     # dystans, czas, „Tam i z powrotem” i „Ile razy” w karcie
   ui/fuelSettings.ts     # „Auta i paliwo”: profile aut i ceny paliw w użyciu
   ui/tripsSummary.ts     # podsumowanie wszystkich tras + podział na osoby
   ui/toast.ts            # powiadomienie „Usunięto · Cofnij”
@@ -81,6 +81,7 @@ koszt = km_łącznie × spalanie / 100 × cena
 ```
 
 - „Tam i z powrotem” podwaja dystans (zakładamy tę samą drogę powrotną).
+- „Ile razy” (1–365) mnoży dystans, litry i koszt trasy, np. `29,9 km × 2 × 3 razy = 179,4 km` dla trzech dni dojazdów do pracy. Czas przejazdu pokazywany jest dla jednego razu.
 - Każda trasa jedzie wybranym autem z sekcji „Auta i paliwo” (spalanie + rodzaj paliwa) albo z „własnym spalaniem” wpisanym tylko dla tej trasy.
 - Koszt trasy liczony jest ceną paliwa jej auta. Ceny podaje się tylko dla paliw, których używają auta na trasach.
 - Przystanki pośrednie (do 5 na trasę) – trasa jest wyznaczana przez wszystkie punkty w podanej kolejności.

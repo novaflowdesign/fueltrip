@@ -78,7 +78,7 @@ describe('validatePrice', () => {
 describe('computeTripCost', () => {
   it('applies koszt = km × spalanie / 100 × cena', () => {
     const result = computeTripCost({ distanceKm: 100, roundTrip: false, consumption: 7.5, price: 6 });
-    expect(result).toEqual({ oneWayKm: 100, multiplier: 1, totalKm: 100, liters: 7.5, cost: 45 });
+    expect(result).toEqual({ oneWayKm: 100, multiplier: 1, times: 1, totalKm: 100, liters: 7.5, cost: 45 });
   });
 
   it('doubles the distance for a round trip', () => {
@@ -116,11 +116,23 @@ describe('computeTripCost', () => {
 
 describe('tripDistance', () => {
   it('keeps one-way distance for a single trip', () => {
-    expect(tripDistance(118.66, false)).toEqual({ oneWayKm: 118.7, multiplier: 1, totalKm: 118.7 });
+    expect(tripDistance(118.66, false)).toEqual({ oneWayKm: 118.7, multiplier: 1, times: 1, totalKm: 118.7 });
   });
 
   it('doubles the rounded one-way distance for a round trip', () => {
-    expect(tripDistance(118.66, true)).toEqual({ oneWayKm: 118.7, multiplier: 2, totalKm: 237.4 });
+    expect(tripDistance(118.66, true)).toEqual({ oneWayKm: 118.7, multiplier: 2, times: 1, totalKm: 237.4 });
+  });
+
+  it('multiplies by the number of times the trip is driven', () => {
+    expect(tripDistance(245.34, true, 3)).toEqual({ oneWayKm: 245.3, multiplier: 2, times: 3, totalKm: 1471.8 });
+    expect(tripDistance(12.44, false, 20)).toEqual({ oneWayKm: 12.4, multiplier: 1, times: 20, totalKm: 248 });
+  });
+
+  it('clamps the number of times to 1–365', () => {
+    expect(tripDistance(10, false, 0).times).toBe(1);
+    expect(tripDistance(10, false, Number.NaN).times).toBe(1);
+    expect(tripDistance(10, false, 2.6).times).toBe(3);
+    expect(tripDistance(10, false, 1000).times).toBe(365);
   });
 });
 
@@ -157,8 +169,34 @@ describe('evaluateTrip', () => {
 
   it('applies the round trip', () => {
     const e = evaluateTrip({ ...base, roundTrip: true });
-    expect(e.distance).toEqual({ oneWayKm: 100, multiplier: 2, totalKm: 200 });
+    expect(e.distance).toEqual({ oneWayKm: 100, multiplier: 2, times: 1, totalKm: 200 });
     expect(e.cost).toBe(90);
+  });
+
+  it('applies the number of times on top of the round trip', () => {
+    const e = evaluateTrip({ ...base, roundTrip: true, times: 3 });
+    expect(e.distance?.totalKm).toBe(600);
+    expect(e.liters).toBe(45);
+    expect(e.cost).toBe(270);
+  });
+});
+
+describe('summarizeTrips with times', () => {
+  it('counts every repetition in the totals', () => {
+    const work = evaluateTrip({ distanceKm: 12.4, roundTrip: true, times: 3, consumption: '6,5', fuelType: 'pb95', price: '6,29' });
+    const once = evaluateTrip({ distanceKm: 100, roundTrip: false, consumption: '7,5', fuelType: 'pb95', price: '6' });
+    const s = summarizeTrips([work, once]);
+    expect(s.totalKm).toBe(174.4);
+    expect(s.cost).toBe(75.42); // 30,42 + 45
+  });
+});
+
+describe('computeTripCost with times', () => {
+  it('prices the whole distance at once (one rounding, not per trip)', () => {
+    // 3 × 12,4 km × 2 = 74,4 km × 6,5 / 100 = 4,836 l × 6,29 = 30,41844 → 30,42 zł
+    const result = computeTripCost({ distanceKm: 12.4, roundTrip: true, times: 3, consumption: 6.5, price: 6.29 });
+    expect(result.totalKm).toBe(74.4);
+    expect(result.cost).toBe(30.42);
   });
 });
 

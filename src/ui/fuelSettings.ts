@@ -6,8 +6,14 @@ export interface FuelSettingsOptions {
   onChange: (patch: Partial<FuelSettingsState>) => void;
 }
 
+export interface FuelSettingsView {
+  element: HTMLElement;
+  /** Overwrite the inputs (e.g. after "Wyczyść wszystko"). Does not call onChange. */
+  setValues(values: FuelSettingsState): void;
+}
+
 /** Global fuel settings shared by all routes: consumption, price and fuel type. */
-export function createFuelSettings(opts: FuelSettingsOptions): HTMLElement {
+export function createFuelSettings(opts: FuelSettingsOptions): FuelSettingsView {
   const element = document.createElement('section');
   element.className = 'panel-section fuel-settings';
   element.setAttribute('aria-labelledby', 'fuel-settings-title');
@@ -43,8 +49,16 @@ export function createFuelSettings(opts: FuelSettingsOptions): HTMLElement {
 
   const fuelType = createFuelTypePicker(opts.initial.fuelType, (value) => opts.onChange({ fuelType: value }));
 
-  element.append(title, fields, fuelType);
-  return element;
+  element.append(title, fields, fuelType.element);
+
+  return {
+    element,
+    setValues(values) {
+      consumption.setValue(values.consumption);
+      price.setValue(values.price);
+      fuelType.setValue(values.fuelType);
+    },
+  };
 }
 
 export interface NumberFieldOptions {
@@ -60,6 +74,8 @@ export interface NumberFieldOptions {
 export interface NumberField {
   element: HTMLElement;
   input: HTMLInputElement;
+  /** Set the value programmatically and refresh the validation message. */
+  setValue(value: string): void;
 }
 
 /** Decimal input with a unit suffix and inline validation message. */
@@ -118,10 +134,20 @@ export function createNumberField(opts: NumberFieldOptions): NumberField {
   });
   renderValidity();
 
-  return { element, input };
+  return {
+    element,
+    input,
+    setValue(value) {
+      input.value = value;
+      renderValidity();
+    },
+  };
 }
 
-function createFuelTypePicker(initial: FuelType, onChange: (value: FuelType) => void): HTMLElement {
+function createFuelTypePicker(
+  initial: FuelType,
+  onChange: (value: FuelType) => void,
+): { element: HTMLElement; setValue: (value: FuelType) => void } {
   const fieldset = document.createElement('fieldset');
   fieldset.className = 'segmented';
 
@@ -133,6 +159,7 @@ function createFuelTypePicker(initial: FuelType, onChange: (value: FuelType) => 
   const options = document.createElement('div');
   options.className = 'segmented__options';
 
+  const radios: HTMLInputElement[] = [];
   for (const type of Object.keys(FUEL_LABELS) as FuelType[]) {
     const label = document.createElement('label');
     label.className = 'segmented__option';
@@ -152,8 +179,12 @@ function createFuelTypePicker(initial: FuelType, onChange: (value: FuelType) => 
 
     label.append(radio, text);
     options.append(label);
+    radios.push(radio);
   }
 
   fieldset.append(options);
-  return fieldset;
+  return {
+    element: fieldset,
+    setValue: (value) => radios.forEach((r) => (r.checked = r.value === value)),
+  };
 }

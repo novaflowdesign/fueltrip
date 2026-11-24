@@ -46,6 +46,12 @@ export function createMap(container: HTMLElement): MapLibreMap {
   return map;
 }
 
+/** Fly back to the initial overview of Poland. */
+export function resetView(map: MapLibreMap): void {
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  map.flyTo({ center: INITIAL_CENTER, zoom: INITIAL_ZOOM, bearing: 0, pitch: 0, duration: reduced ? 0 : 1200 });
+}
+
 /**
  * The Liberty style prefers English names (`name_en` → "Krakow", "Bielsko-Biala").
  * Switch place labels to Polish names where available ("Wiedeń", "Niemcy"),

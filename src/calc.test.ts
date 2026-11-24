@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { computeTripCost, parseDecimal, tripDistance, validateConsumption, validatePrice } from './calc.ts';
+import {
+  computeTripCost,
+  evaluateTrip,
+  parseDecimal,
+  summarizeTrips,
+  tripDistance,
+  validateConsumption,
+  validatePrice,
+} from './calc.ts';
 
 describe('parseDecimal', () => {
   it.each([
@@ -112,5 +120,89 @@ describe('tripDistance', () => {
 
   it('doubles the rounded one-way distance for a round trip', () => {
     expect(tripDistance(118.66, true)).toEqual({ oneWayKm: 118.7, multiplier: 2, totalKm: 237.4 });
+  });
+});
+
+describe('evaluateTrip', () => {
+  const base = { distanceKm: 100, roundTrip: false, consumptionOverride: '', globalConsumption: '7,5', price: '6' };
+
+  it('uses the global consumption when there is no override', () => {
+    const e = evaluateTrip(base);
+    expect(e.consumptionSource).toBe('global');
+    expect(e.liters).toBe(7.5);
+    expect(e.cost).toBe(45);
+  });
+
+  it('uses the per-route override when given', () => {
+    const e = evaluateTrip({ ...base, consumptionOverride: '10' });
+    expect(e.consumptionSource).toBe('route');
+    expect(e.liters).toBe(10);
+    expect(e.cost).toBe(60);
+  });
+
+  it('reports an invalid override instead of falling back silently', () => {
+    const e = evaluateTrip({ ...base, consumptionOverride: '99' });
+    expect(e.consumption.status).toBe('invalid');
+    expect(e.liters).toBeNull();
+    expect(e.cost).toBeNull();
+  });
+
+  it('gives liters but no cost when the price is missing', () => {
+    const e = evaluateTrip({ ...base, price: '' });
+    expect(e.liters).toBe(7.5);
+    expect(e.cost).toBeNull();
+    expect(e.price.status).toBe('empty');
+  });
+
+  it('has no distance, liters or cost before the route is calculated', () => {
+    const e = evaluateTrip({ ...base, distanceKm: null });
+    expect(e.distance).toBeNull();
+    expect(e.liters).toBeNull();
+    expect(e.cost).toBeNull();
+  });
+
+  it('applies the round trip', () => {
+    const e = evaluateTrip({ ...base, roundTrip: true });
+    expect(e.distance).toEqual({ oneWayKm: 100, multiplier: 2, totalKm: 200 });
+    expect(e.cost).toBe(90);
+  });
+});
+
+describe('summarizeTrips', () => {
+  const trip = (distanceKm: number | null, extra: Partial<Parameters<typeof evaluateTrip>[0]> = {}) =>
+    evaluateTrip({ distanceKm, roundTrip: false, consumptionOverride: '', globalConsumption: '7,5', price: '6,29', ...extra });
+
+  it('sums distance, liters and cost of calculated routes', () => {
+    const s = summarizeTrips([trip(118.7), trip(100, { roundTrip: true }), trip(50, { consumptionOverride: '5' })]);
+    expect(s.includedCount).toBe(3);
+    expect(s.totalKm).toBe(368.7); // 118.7 + 200 + 50
+    expect(s.liters).toBeCloseTo(8.9025 + 15 + 2.5, 10);
+    // per-route rounded: 56.00 + 94.35 + 15.73
+    expect(s.cost).toBe(166.08);
+  });
+
+  it('adds up the displayed (rounded) per-route costs', () => {
+    // each: 10 km × 5 l/100 km × 2.01 = 1.005 → 1.01; three of them → 3.03 (not 3.02 from 3.015)
+    const trips = [1, 2, 3].map(() => trip(10, { consumptionOverride: '5', price: '2,01' }));
+    expect(summarizeTrips(trips).cost).toBe(3.03);
+  });
+
+  it('skips routes without a distance', () => {
+    const s = summarizeTrips([trip(100), trip(null)]);
+    expect(s.includedCount).toBe(1);
+    expect(s.skippedCount).toBe(1);
+    expect(s.totalKm).toBe(100);
+  });
+
+  it('has no total cost if any included route lacks a cost', () => {
+    const s = summarizeTrips([trip(100), trip(100, { consumptionOverride: 'abc' })]);
+    expect(s.totalKm).toBe(200);
+    expect(s.liters).toBeNull();
+    expect(s.cost).toBeNull();
+  });
+
+  it('is empty when nothing is calculated', () => {
+    expect(summarizeTrips([trip(null)])).toEqual({ includedCount: 0, skippedCount: 1, totalKm: 0, liters: null, cost: null });
+    expect(summarizeTrips([])).toEqual({ includedCount: 0, skippedCount: 0, totalKm: 0, liters: null, cost: null });
   });
 });

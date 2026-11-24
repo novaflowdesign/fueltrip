@@ -1,8 +1,11 @@
 import './style.css';
 import { createMap } from './map/map.ts';
 import { EndpointMarkers } from './map/markers.ts';
-import { searchPlaces } from './services/geocoding.ts';
+import { RouteLayer } from './map/routeLayer.ts';
+import { searchPlaces, type Place } from './services/geocoding.ts';
+import { OsrmRoutingProvider, RoutingError, type RoutingProvider } from './services/routing.ts';
 import { createRouteSearch, type RouteEndpoints } from './ui/routeSearch.ts';
+import { createRouteSummary } from './ui/routeSummary.ts';
 
 const mapContainer = document.getElementById('map');
 const panelBody = document.getElementById('panel-body');
@@ -12,15 +15,43 @@ if (!mapContainer || !panelBody) {
 
 const map = createMap(mapContainer);
 const markers = new EndpointMarkers(map);
+const routeLayer = new RouteLayer(map);
+const routing: RoutingProvider = new OsrmRoutingProvider();
+const summary = createRouteSummary();
 
-const hint = document.createElement('p');
-hint.className = 'panel__hint';
+let routeController: AbortController | null = null;
 
-function renderHint({ from, to }: RouteEndpoints): void {
-  hint.textContent =
-    from && to
-      ? 'Start i cel wybrane. Wyznaczanie trasy pojawi się w następnym etapie.'
-      : 'Wybierz miejsce startu i cel podróży.';
+async function updateRoute({ from, to }: RouteEndpoints): Promise<void> {
+  // A newer selection always wins over an in-flight request.
+  routeController?.abort();
+  routeController = null;
+  routeLayer.clear();
+
+  if (!from || !to) {
+    summary.showIdle('Wybierz miejsce startu i cel podróży.');
+    return;
+  }
+
+  if (isSamePlace(from, to)) {
+    summary.showMessage('Start i cel to to samo miejsce. Wybierz inny cel podróży.');
+    return;
+  }
+
+  const controller = new AbortController();
+  routeController = controller;
+  summary.showLoading();
+
+  try {
+    const route = await routing.getRoute([from, to], controller.signal);
+    if (controller.signal.aborted) return;
+    summary.showRoute(route);
+    void routeLayer.show(route.geometry);
+  } catch (err) {
+    if (controller.signal.aborted) return;
+    summary.showError(routingErrorMessage(err), () => void updateRoute(routeSearch.getEndpoints()));
+  } finally {
+    if (routeController === controller) routeController = null;
+  }
 }
 
 const routeSearch = createRouteSearch({
@@ -31,9 +62,32 @@ const routeSearch = createRouteSearch({
   },
   onChange: (endpoints) => {
     markers.update(endpoints.from, endpoints.to);
-    renderHint(endpoints);
+    void updateRoute(endpoints);
   },
 });
 
-renderHint(routeSearch.getEndpoints());
-panelBody.append(routeSearch.element, hint);
+panelBody.append(routeSearch.element, summary.element);
+void updateRoute(routeSearch.getEndpoints());
+
+function isSamePlace(a: Place, b: Place): boolean {
+  // ~50 m tolerance – different OSM objects can sit at the same spot.
+  return a.id === b.id || (Math.abs(a.lat - b.lat) < 0.0005 && Math.abs(a.lon - b.lon) < 0.0005);
+}
+
+function routingErrorMessage(err: unknown): string {
+  if (err instanceof RoutingError) {
+    switch (err.kind) {
+      case 'no-route':
+        return 'Nie znaleziono trasy samochodowej między tymi punktami.';
+      case 'timeout':
+        return 'Serwer tras nie odpowiada. Spróbuj ponownie za chwilę.';
+      case 'network':
+        return navigator.onLine
+          ? 'Nie udało się połączyć z serwerem tras.'
+          : 'Brak połączenia z internetem.';
+      case 'http':
+        return 'Serwer tras zwrócił błąd. Spróbuj ponownie za chwilę.';
+    }
+  }
+  return 'Nie udało się wyznaczyć trasy.';
+}

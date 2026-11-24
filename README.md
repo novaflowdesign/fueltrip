@@ -6,7 +6,7 @@ Wyszukaj trasę „skąd → dokąd”, zobacz ją na mapie i od razu poznaj dys
 
 🔗 **Wersja online:** https://novaflowdesign.github.io/fueltrip/
 
-> Status: etap 4 – trasa „Skąd → Dokąd” na mapie, dystans i czas, opcja „Tam i z powrotem” oraz koszt paliwa (spalanie, cena, rodzaj paliwa). Wiele tras naraz w przygotowaniu.
+> Status: etap 5 – wiele tras naraz (własne nazwy, kolory na mapie, osobne spalanie), „Tam i z powrotem”, koszt paliwa i podsumowanie łączne. Zapamiętywanie w przeglądarce w przygotowaniu.
 
 ## Stack
 
@@ -43,16 +43,19 @@ Jednorazowa konfiguracja: **Settings → Pages → Build and deployment → Sour
 src/
   main.ts                # start aplikacji
   calc.ts                # czysta logika obliczeń kosztu (+ calc.test.ts)
+  state/store.ts         # stan aplikacji: trasy, ustawienia (+ store.test.ts)
   map/map.ts             # inicjalizacja MapLibre
   map/markers.ts         # markery startu/celu + kadrowanie mapy
-  map/routeLayer.ts      # linia trasy + animacja rysowania
+  map/routeLayer.ts      # linie tras (kolor per trasa), animacja, podświetlanie
   services/geocoding.ts  # Photon – wyszukiwanie miejsc
   services/routing.ts    # RoutingProvider + OSRM
   ui/autocomplete.ts     # pole z podpowiedziami (klawiatura, ARIA)
   ui/routeSearch.ts      # pola „Skąd” / „Dokąd” + zamiana ⇅
-  ui/routeSummary.ts     # karta z dystansem, czasem i „Tam i z powrotem”
-  ui/fuelSettings.ts     # spalanie, cena, rodzaj paliwa
-  ui/costSummary.ts      # karta „Koszt przejazdu”
+  ui/routeCard.ts        # karta trasy: nazwa, zwijanie, usuwanie, spalanie, koszt
+  ui/routeSummary.ts     # dystans, czas i „Tam i z powrotem” w karcie
+  ui/fuelSettings.ts     # globalne spalanie, cena, rodzaj paliwa
+  ui/tripsSummary.ts     # podsumowanie wszystkich tras
+  ui/toast.ts            # powiadomienie „Usunięto · Cofnij”
   utils/debounce.ts
   utils/format.ts        # formatowanie km, zł, litrów i czasu po polsku
   style.css              # style + zmienne kolorów (jasny/ciemny motyw)
@@ -71,4 +74,6 @@ koszt = km_łącznie × spalanie / 100 × cena
 ```
 
 - „Tam i z powrotem” podwaja dystans (zakładamy tę samą drogę powrotną).
+- Każda trasa może mieć własne spalanie (np. inne auto); puste pole = spalanie z sekcji „Paliwo”.
+- Suma w podsumowaniu to suma kosztów poszczególnych tras (każdy zaokrąglony do grosza), więc rozbicie zawsze się zgadza.
 - Pola liczbowe przyjmują przecinek i kropkę (`7,5` lub `7.5`).

@@ -129,7 +129,9 @@ body {
   min-height: 0;
 }
 
-.map {
+/* Higher specificity than MapLibre's `.maplibregl-map { position: relative }`,
+   which is loaded later and would otherwise collapse the map to 0 px height. */
+.map-wrap > .map {
   position: absolute;
   inset: 0;
 }

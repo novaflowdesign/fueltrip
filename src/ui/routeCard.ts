@@ -2,6 +2,7 @@ import { validateConsumption, type TripEvaluation } from '../calc.ts';
 import type { Place } from '../services/geocoding.ts';
 import { routeColor, routeName, type TripRoute } from '../state/store.ts';
 import { formatCurrency, formatKm, formatLiters } from '../utils/format.ts';
+import { animatedNumber } from './countUp.ts';
 import { createNumberField, type NumberField } from './fuelSettings.ts';
 import { createRouteSearch, type RouteEndpoints, type RouteSearch } from './routeSearch.ts';
 import { createRouteSummary, type RouteSummary } from './routeSummary.ts';
@@ -42,6 +43,8 @@ export class RouteCard {
   private readonly removeButton: HTMLButtonElement;
   private readonly compact: HTMLButtonElement;
   private readonly body: HTMLElement;
+  private readonly bodyWrap: HTMLElement;
+  private animationTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly search: RouteSearch;
   private readonly summary: RouteSummary;
   private readonly consumption: NumberField;
@@ -139,7 +142,14 @@ export class RouteCard {
     this.cost.setAttribute('aria-live', 'polite');
 
     this.body.append(this.search.element, this.summary.element, this.consumption.element, this.cost);
-    this.element.append(header, this.compact, this.body);
+
+    // Grid-rows trick (1fr ↔ 0fr) gives a smooth height animation for collapse/expand.
+    this.bodyWrap = document.createElement('div');
+    this.bodyWrap.className = 'route-card__body-wrap';
+    this.bodyWrap.append(this.body);
+    this.element.append(header, this.compact, this.bodyWrap);
+    this.element.dataset.collapsed = String(route.collapsed);
+    this.body.inert = route.collapsed;
 
     // ----- activation / highlight -----
     this.element.addEventListener('click', (e) => {
@@ -155,7 +165,7 @@ export class RouteCard {
   update(route: TripRoute, evaluation: TripEvaluation, ctx: RouteCardContext): void {
     const name = routeName(route);
     this.element.dataset.active = String(ctx.active);
-    this.element.dataset.collapsed = String(route.collapsed);
+    if (this.element.dataset.collapsed !== String(route.collapsed)) this.animateCollapse(route.collapsed);
 
     if (document.activeElement !== this.nameInput && this.nameInput.value !== route.name) {
       this.nameInput.value = route.name;
@@ -166,7 +176,6 @@ export class RouteCard {
     this.collapseButton.title = route.collapsed ? 'Rozwiń' : 'Zwiń';
     this.removeButton.setAttribute('aria-label', `Usuń trasę ${name}`);
     this.removeButton.title = 'Usuń trasę';
-    this.body.hidden = route.collapsed;
     this.compact.hidden = !route.collapsed;
     this.compact.textContent = compactLine(route, evaluation);
 
@@ -176,6 +185,16 @@ export class RouteCard {
 
     this.renderStatus(route);
     this.renderCost(evaluation);
+  }
+
+  /** While animating, clip the body; afterwards let dropdowns overflow the card again. */
+  private animateCollapse(collapsed: boolean): void {
+    clearTimeout(this.animationTimer);
+    this.element.classList.add('is-animating');
+    this.element.dataset.collapsed = String(collapsed);
+    // Collapsed content must not be reachable with Tab or by screen readers.
+    this.body.inert = collapsed;
+    this.animationTimer = setTimeout(() => this.element.classList.remove('is-animating'), 320);
   }
 
   focusFrom(): void {
@@ -219,7 +238,7 @@ export class RouteCard {
     value.className = 'route-card__cost-value';
 
     if (e.cost !== null && e.liters !== null) {
-      value.textContent = formatCurrency(e.cost);
+      value.append(animatedNumber(`route-cost-${this.id}`, e.cost, formatCurrency));
       const liters = document.createElement('span');
       liters.className = 'route-card__cost-liters';
       liters.textContent = formatLiters(e.liters);

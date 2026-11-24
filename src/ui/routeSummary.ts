@@ -1,6 +1,7 @@
 import { tripDistance } from '../calc.ts';
 import type { RouteResult } from '../services/routing.ts';
 import { formatDuration, formatKm } from '../utils/format.ts';
+import { animatedNumber } from './countUp.ts';
 
 export interface RouteSummaryOptions {
   /** Unique prefix for element ids. */
@@ -60,8 +61,15 @@ export function createRouteSummary(opts: RouteSummaryOptions): RouteSummary {
     const roundTrip = multiplier === 2;
 
     stats.replaceChildren(
-      stat(roundTrip ? 'Dystans łącznie' : 'Dystans', formatKm(totalKm)),
-      stat(roundTrip ? 'Czas łącznie' : 'Czas przejazdu', `≈ ${formatDuration(roundToMinute(route.durationSeconds) * multiplier)}`),
+      stat(roundTrip ? 'Dystans łącznie' : 'Dystans', animatedNumber(`${opts.idPrefix}-km`, totalKm, formatKm)),
+      stat(
+        roundTrip ? 'Czas łącznie' : 'Czas przejazdu',
+        animatedNumber(
+          `${opts.idPrefix}-min`,
+          (roundToMinute(route.durationSeconds) / 60) * multiplier,
+          (minutes) => `≈ ${formatDuration(Math.round(minutes) * 60)}`,
+        ),
+      ),
     );
     formula.textContent = roundTrip ? `${formatKm(oneWayKm)} × 2 = ${formatKm(totalKm)}` : '';
     formula.hidden = !roundTrip;
@@ -119,14 +127,14 @@ function roundToMinute(seconds: number): number {
   return Math.round(seconds / 60) * 60;
 }
 
-function stat(label: string, value: string): HTMLElement {
+function stat(label: string, value: string | Node): HTMLElement {
   const wrap = div('stat');
   const labelEl = document.createElement('span');
   labelEl.className = 'stat__label';
   labelEl.textContent = label;
   const valueEl = document.createElement('span');
   valueEl.className = 'stat__value';
-  valueEl.textContent = value;
+  valueEl.append(value);
   wrap.append(labelEl, valueEl);
   return wrap;
 }

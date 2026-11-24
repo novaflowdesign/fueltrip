@@ -1,6 +1,7 @@
 import type { FieldResult, TripEvaluation, TripsSummary } from '../calc.ts';
 import { FUEL_LABELS, type FuelType } from '../state/store.ts';
 import { formatCurrency, formatKm, formatLiters } from '../utils/format.ts';
+import { animatedNumber } from './countUp.ts';
 
 export interface SummaryItem {
   id: string;
@@ -57,7 +58,9 @@ export function createTripsSummary(opts: TripsSummaryOptions): TripsSummaryView 
       const nodes: Node[] = [];
 
       if (totals.cost !== null) {
-        nodes.push(text('p', 'cost-summary__amount', formatCurrency(totals.cost)));
+        const amount = text('p', 'cost-summary__amount', '');
+        amount.append(animatedNumber('total-cost', totals.cost, formatCurrency));
+        nodes.push(amount);
       } else {
         nodes.push(text('p', 'cost-summary__hint cost-summary__hint--block', missingCostReason(price)));
       }
@@ -65,10 +68,16 @@ export function createTripsSummary(opts: TripsSummaryOptions): TripsSummaryView 
       const details = document.createElement('dl');
       details.className = 'cost-summary__details';
       details.append(
-        ...row(totals.includedCount > 1 ? 'Dystans łącznie' : 'Dystans', formatKm(totals.totalKm)),
+        ...row(
+          totals.includedCount > 1 ? 'Dystans łącznie' : 'Dystans',
+          animatedNumber('total-km', totals.totalKm, formatKm),
+        ),
       );
       if (totals.liters !== null) {
-        details.append(...row('Paliwo', `${formatLiters(totals.liters)} ${FUEL_LABELS[fuelType]}`));
+        const label = FUEL_LABELS[fuelType];
+        details.append(
+          ...row('Paliwo', animatedNumber('total-liters', totals.liters, (l) => `${formatLiters(l)} ${label}`)),
+        );
       }
       nodes.push(details);
 
@@ -143,8 +152,10 @@ function plural(n: number, one: string, few: string, many: string): string {
   return last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14) ? few : many;
 }
 
-function row(term: string, value: string): [HTMLElement, HTMLElement] {
-  return [text('dt', '', term), text('dd', '', value)];
+function row(term: string, value: string | Node): [HTMLElement, HTMLElement] {
+  const dd = text('dd', '', '');
+  dd.append(value);
+  return [text('dt', '', term), dd];
 }
 
 function text<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, content: string): HTMLElementTagNameMap[K] {

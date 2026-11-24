@@ -367,9 +367,9 @@ body {
   position: relative;
 }
 
-/* "A" / "B" badge in front of the input – same letters and color as the map markers. */
+/* "A" / "B" / stop-number badge in front of the input – same as the map markers. */
 .combobox::before {
-  content: 'A';
+  content: attr(data-badge);
   position: absolute;
   z-index: 1;
   left: 10px;
@@ -387,10 +387,6 @@ body {
   font-weight: 800;
   pointer-events: none;
   transition: background 0.15s, color 0.15s;
-}
-
-.field--end .combobox::before {
-  content: 'B';
 }
 
 .field.is-selected .combobox::before {
@@ -958,7 +954,9 @@ body {
 }
 
 .route-card__cost-label {
+  flex: none;
   color: var(--color-text-muted);
+  white-space: nowrap;
 }
 
 .route-card__cost-value {
@@ -970,7 +968,8 @@ body {
 
 .route-card__cost[data-state='hint'] .route-card__cost-value {
   font-weight: 500;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
+  line-height: 1.35;
   color: var(--color-text-muted);
 }
 
@@ -1102,6 +1101,105 @@ body {
   min-width: 72px;
   font-weight: 700;
   text-align: right;
+}
+
+/* ---------- Stops ---------- */
+.stop-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+}
+
+.stop-controls {
+  display: flex;
+  gap: 2px;
+  margin-right: 2px;
+}
+
+.stop-controls__btn {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.stop-controls__btn:hover:not(:disabled) {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+}
+
+.stop-controls__remove:hover:not(:disabled) {
+  color: var(--color-danger);
+}
+
+.stop-controls__btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.stop-controls__btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-focus);
+}
+
+.route-search__add-stop {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  margin: 4px 0 0;
+  padding: 0 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-accent);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.route-search__add-stop:hover {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+
+.route-search__add-stop:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-focus);
+}
+
+.route-search__add-stop[hidden] {
+  display: none;
+}
+
+/* Stop badge: a filled number on a white ring (smaller than the A/B pins). */
+.field--stop .combobox::before {
+  border-radius: 6px;
+}
+
+.stop-marker {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 2px solid #fff;
+  border-radius: 7px;
+  background: var(--pin-color, var(--color-accent));
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 800;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.3);
+  transition: opacity 0.2s;
+}
+
+.stop-marker.is-dimmed {
+  opacity: 0.4;
 }
 
 /* ---------- Cars & fuel prices ---------- */

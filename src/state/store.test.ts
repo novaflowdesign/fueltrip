@@ -19,6 +19,7 @@ import {
   fuelsInUse,
   CUSTOM_CAR,
   DEFAULT_CAR_ID,
+  routePoints,
   type IdFactory,
 } from './store.ts';
 
@@ -215,5 +216,23 @@ describe('car profiles', () => {
 
     state = updateRoute(state, 'r2', { carId: added.id });
     expect(fuelsInUse(state)).toEqual(['pb95', 'lpg']);
+  });
+});
+
+describe('routePoints', () => {
+  const p = (id: string) => ({ id, name: id, context: '', label: id, lon: 19, lat: 50 });
+
+  it('is null until start and end are chosen', () => {
+    expect(routePoints({ from: p('A'), to: null, stops: [] })).toBeNull();
+    expect(routePoints({ from: null, to: p('B'), stops: [] })).toBeNull();
+  });
+
+  it('routes through filled stops in order and skips empty ones', () => {
+    const points = routePoints({
+      from: p('A'),
+      to: p('B'),
+      stops: [{ id: 's1', place: p('S1') }, { id: 's2', place: null }, { id: 's3', place: p('S3') }],
+    });
+    expect(points?.map((x) => x.id)).toEqual(['A', 'S1', 'S3', 'B']);
   });
 });

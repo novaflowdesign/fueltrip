@@ -128,7 +128,7 @@ export class RouteCard {
 
     this.search = createRouteSearch({
       idPrefix: prefix,
-      initial: { from: route.from, to: route.to },
+      initial: { from: route.from, to: route.to, stops: route.stops },
       search: cb.search,
       onChange: (endpoints) => cb.onEndpointsChange(this.id, endpoints),
     });
@@ -314,7 +314,11 @@ export class RouteCard {
 
 function compactLine(route: TripRoute, e: TripEvaluation): string {
   if (!route.from && !route.to) return 'Trasa nieuzupełniona – kliknij, aby edytować';
-  const parts = [`${route.from?.name ?? '…'} → ${route.to?.name ?? '…'}`];
+  const stops = route.stops.flatMap((s) => (s.place ? [s.place.name] : []));
+  // Up to two stop names fit; more are summarized as a count.
+  const middle =
+    stops.length === 0 ? [] : stops.length <= 2 ? stops : [`${stops.length} ${stops.length < 5 ? 'przystanki' : 'przystanków'}`];
+  const parts = [[route.from?.name ?? '…', ...middle, route.to?.name ?? '…'].join(' → ')];
   if (e.distance) parts.push(formatKm(e.distance.totalKm) + (route.roundTrip ? ' (×2)' : ''));
   if (e.cost !== null) parts.push(formatCurrency(e.cost));
   return parts.join(' · ');

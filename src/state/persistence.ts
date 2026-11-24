@@ -9,6 +9,7 @@ import {
   CUSTOM_CAR,
   DEFAULT_CAR,
   FUEL_LABELS,
+  MAX_STOPS,
   defaultIdFactory,
   type AppState,
   type CarProfile,
@@ -34,6 +35,7 @@ interface StoredRoute {
   colorIndex: number;
   from: Place | null;
   to: Place | null;
+  stops: Array<{ id: string; place: Place | null }>;
   roundTrip: boolean;
   carId: string | null;
   consumption: string;
@@ -81,6 +83,7 @@ export function serialize(state: AppState, withGeometry: boolean): StoredState {
       colorIndex: r.colorIndex,
       from: r.from,
       to: r.to,
+      stops: r.stops,
       roundTrip: r.roundTrip,
       carId: r.carId,
       consumption: r.consumption,
@@ -191,6 +194,7 @@ function parseRoute(item: unknown, index: number, makeId: IdFactory, carIds: Set
     colorIndex: Number.isInteger(item.colorIndex) && (item.colorIndex as number) >= 0 ? (item.colorIndex as number) : index,
     from,
     to,
+    stops: parseStops(item.stops),
     roundTrip: item.roundTrip === true,
     carId: parseCarId(item, carIds),
     consumption: typeof item.consumption === 'string' ? item.consumption.slice(0, 20) : '',
@@ -229,6 +233,16 @@ function parseResult(value: unknown): RouteResult | null {
     durationSeconds,
     geometry: { type: 'LineString', coordinates: coords as GeoJSON.Position[] },
   };
+}
+
+function parseStops(value: unknown): TripRoute['stops'] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value
+    .filter((s): s is Record<string, unknown> => isObject(s) && typeof s.id === 'string' && !!s.id)
+    .filter((s) => !seen.has(s.id as string) && !!seen.add(s.id as string))
+    .slice(0, MAX_STOPS)
+    .map((s) => ({ id: (s.id as string).slice(0, 100), place: parsePlace(s.place) }));
 }
 
 function parseCarId(item: Record<string, unknown>, carIds: Set<string>): string | null {

@@ -209,3 +209,27 @@ describe('migration from the pre-profiles format', () => {
     expect(state.cars).toEqual([{ id: 'c1', name: 'X', consumption: '6', fuelType: 'on' }]);
   });
 });
+
+describe('stops', () => {
+  it('round-trips stops and sanitizes invalid ones', () => {
+    const storage = new MemoryStorage();
+    const state = updateRoute(sampleState(), 'id1', {
+      stops: [{ id: 's1', place: krakow }, { id: 's2', place: null }],
+    });
+    saveState(storage, state);
+    expect(loadState(storage, ids())!.routes[0]!.stops).toEqual([{ id: 's1', place: krakow }, { id: 's2', place: null }]);
+
+    const raw = JSON.stringify({
+      version: 1,
+      routes: [{ id: 'a', stops: [{ id: 'x', place: { ...gliwice, lon: 'bad' } }, { id: 'x' }, 'junk', ...Array.from({ length: 8 }, (_, i) => ({ id: `s${i}` }))] }],
+    });
+    const stops = deserialize(raw, ids())!.routes[0]!.stops;
+    expect(stops[0]).toEqual({ id: 'x', place: null });
+    expect(stops).toHaveLength(5); // duplicates/junk dropped, capped at MAX_STOPS
+  });
+
+  it('older saves without stops get an empty list', () => {
+    const raw = JSON.stringify({ version: 1, routes: [{ id: 'a', from: gliwice, to: krakow }] });
+    expect(deserialize(raw, ids())!.routes[0]!.stops).toEqual([]);
+  });
+});

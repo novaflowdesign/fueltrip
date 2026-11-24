@@ -38,6 +38,8 @@ export interface TripRoute {
   colorIndex: number;
   from: Place | null;
   to: Place | null;
+  /** Intermediate stops in order (empty fields are kept in the UI but ignored for routing). */
+  stops: RouteStop[];
   roundTrip: boolean;
   /** Car profile id; null = the default car; CUSTOM_CAR = one-off consumption below. */
   carId: string | null;
@@ -47,6 +49,20 @@ export interface TripRoute {
   status: RouteStatus;
   result: RouteResult | null;
   error: string | null;
+}
+
+export interface RouteStop {
+  id: string;
+  place: Place | null;
+}
+
+export const MAX_STOPS = 5;
+
+/** Points to route through: start, filled stops, end – or null while start/end is missing. */
+export function routePoints(route: Pick<TripRoute, 'from' | 'to' | 'stops'>): Place[] | null {
+  if (!route.from || !route.to) return null;
+  const stops = route.stops.flatMap((s) => (s.place ? [s.place] : []));
+  return [route.from, ...stops, route.to];
 }
 
 export interface CarProfile {
@@ -123,6 +139,7 @@ function newRoute(number: number, colorIndex: number, id: string): TripRoute {
     colorIndex,
     from: null,
     to: null,
+    stops: [],
     roundTrip: false,
     carId: null,
     consumption: '',

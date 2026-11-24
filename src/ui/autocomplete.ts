@@ -12,6 +12,8 @@ export interface AutocompleteOptions {
   placeholder: string;
   /** Extra class for the field (e.g. start/end styling). */
   className?: string;
+  /** Short badge shown inside the input ("A", "B", "1"…), same as on the map marker. */
+  badge: string;
   search: (query: string, signal: AbortSignal) => Promise<Place[]>;
   /** Called with the chosen place, or `null` when the selection is cleared. */
   onSelect: (place: Place | null) => void;
@@ -30,6 +32,8 @@ export class PlaceAutocomplete {
   readonly element: HTMLElement;
   /** Row holding the label – extra controls (e.g. a swap button) can be appended here. */
   readonly header: HTMLElement;
+  private readonly labelEl: HTMLLabelElement;
+  private readonly box: HTMLElement;
 
   private readonly input: HTMLInputElement;
   private readonly list: HTMLUListElement;
@@ -51,12 +55,15 @@ export class PlaceAutocomplete {
     this.element = el('div', `field ${opts.className ?? ''}`.trim());
 
     const label = el('label', 'field__label');
+    this.labelEl = label;
     label.htmlFor = inputId;
     label.textContent = opts.label;
     this.header = el('div', 'field__header');
     this.header.append(label);
 
     const box = el('div', 'combobox');
+    box.dataset.badge = opts.badge;
+    this.box = box;
 
     this.input = el('input', 'combobox__input');
     Object.assign(this.input, {
@@ -103,6 +110,7 @@ export class PlaceAutocomplete {
     this.cancelPending();
     this.selected = state.place;
     this.input.value = state.place ? state.place.label : state.text;
+    this.showStart();
     this.results = [];
     this.close();
     this.setStatus('');
@@ -111,6 +119,19 @@ export class PlaceAutocomplete {
 
   focus(): void {
     this.input.focus();
+  }
+
+  /** Show the beginning of a long address ("Katowice, …"), not its end. */
+  private showStart(): void {
+    if (document.activeElement === this.input) this.input.setSelectionRange(0, 0);
+    this.input.scrollLeft = 0;
+  }
+
+  /** Renumber (used when stops are reordered). */
+  setLabel(label: string, badge: string): void {
+    this.labelEl.textContent = label;
+    this.box.dataset.badge = badge;
+    this.list.setAttribute('aria-label', label);
   }
 
   // ---------- Event handlers ----------
@@ -234,6 +255,7 @@ export class PlaceAutocomplete {
   private select(place: Place): void {
     this.selected = place;
     this.input.value = place.label;
+    this.showStart();
     this.element.classList.add('is-selected');
     this.close();
     this.setStatus('');

@@ -23,6 +23,7 @@ import {
   removeCar,
   setPrice,
   resolveCar,
+  routePoints,
   type AppState,
   type RemovedRoute,
   type TripRoute,
@@ -86,13 +87,14 @@ async function requestRoute(id: string): Promise<void> {
 
   const route = findRoute(id);
   if (!route) return;
-  const { from, to } = route;
+  const points = routePoints(route);
 
-  if (!from || !to) {
+  if (!points) {
     store.update((s) => updateRoute(s, id, { status: 'idle', result: null, error: null }));
     return;
   }
-  if (isSamePlace(from, to)) {
+  // A→A is only meaningless without stops (with stops it's a valid loop).
+  if (points.length === 2 && isSamePlace(points[0]!, points[1]!)) {
     store.update((s) => updateRoute(s, id, { status: 'same-place', result: null, error: null }));
     return;
   }
@@ -102,7 +104,7 @@ async function requestRoute(id: string): Promise<void> {
   store.update((s) => updateRoute(s, id, { status: 'loading', result: null, error: null }));
 
   try {
-    const result = await routing.getRoute([from, to], controller.signal);
+    const result = await routing.getRoute(points, controller.signal);
     if (controller.signal.aborted) return;
     store.update((s) => updateRoute(s, id, { status: 'ready', result }));
     routeLayers.fit([id]);
@@ -163,13 +165,20 @@ const callbacks: RouteCardCallbacks = {
     const center = map.getCenter();
     return searchPlaces(query, { signal, near: { lon: center.lng, lat: center.lat }, zoom: map.getZoom() });
   },
-  onEndpointsChange: (id, { from, to }) => {
+  onEndpointsChange: (id, { from, to, stops }) => {
     const prev = findRoute(id);
-    store.update((s) => updateRoute(s, id, { from, to }));
+    store.update((s) => updateRoute(s, id, { from, to, stops }));
+    const next = findRoute(id);
+    if (!prev || !next) return;
+
     // Move the camera only when a place was picked (not when a field was just cleared).
-    const picked = (from && from.id !== prev?.from?.id) || (to && to.id !== prev?.to?.id);
+    const prevIds = new Set([prev.from, prev.to, ...prev.stops.map((s) => s.place)].map((p) => p?.id));
+    const picked = [from, to, ...stops.map((s) => s.place)].some((p) => p && !prevIds.has(p.id));
     if (picked) markers.frame(id);
-    void requestRoute(id);
+
+    // Adding an empty stop or reordering nothing doesn't change the route – don't re-request it.
+    const key = (r: TripRoute): string => routePoints(r)?.map((p) => p.id).join('>') ?? '';
+    if (key(prev) !== key(next) || next.status === 'idle' || next.status === 'error') void requestRoute(id);
   },
   onRoundTripChange: (id, roundTrip) => store.update((s) => updateRoute(s, id, { roundTrip })),
   onNameChange: (id, name) => store.update((s) => updateRoute(s, id, { name })),
@@ -297,7 +306,7 @@ function render(state: AppState): void {
   for (const route of state.routes) {
     const color = routeColor(route);
     routeLayers.set(route.id, route.status === 'ready' ? (route.result?.geometry ?? null) : null, color);
-    markers.update(route.id, route.from, route.to, color);
+    markers.update(route.id, route.from, route.to, color, route.stops.flatMap((s) => (s.place ? [s.place] : [])));
   }
   applyHighlight(state);
 

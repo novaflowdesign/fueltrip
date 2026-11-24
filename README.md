@@ -6,7 +6,7 @@ Wyszukaj trasę „skąd → dokąd”, zobacz ją na mapie i od razu poznaj dys
 
 🔗 **Wersja online:** https://novaflowdesign.github.io/fueltrip/
 
-> Status: etap 7 – wiele tras (nazwy, kolory, osobne spalanie), „Tam i z powrotem”, koszt paliwa, podsumowanie, zapamiętywanie w przeglądarce, jasny/ciemny motyw (także mapy), animacje i wersja mobilna z wysuwanym panelem. Dodatki (profile aut, przystanki, podział kosztu) w przygotowaniu.
+> Status: wszystkie etapy z planu gotowe – wiele tras z przystankami, profile aut z cenami paliw, „Tam i z powrotem”, podział kosztu na osoby, zapamiętywanie w przeglądarce, jasny/ciemny motyw, animacje i wersja mobilna.
 
 ## Stack
 
@@ -53,11 +53,11 @@ src/
   services/geocoding.ts  # Photon – wyszukiwanie miejsc
   services/routing.ts    # RoutingProvider + OSRM
   ui/autocomplete.ts     # pole z podpowiedziami (klawiatura, ARIA)
-  ui/routeSearch.ts      # pola „Skąd” / „Dokąd” + zamiana ⇅
-  ui/routeCard.ts        # karta trasy: nazwa, zwijanie, usuwanie, spalanie, koszt
+  ui/routeSearch.ts      # „Skąd” / przystanki / „Dokąd” + odwracanie ⇅
+  ui/routeCard.ts        # karta trasy: nazwa, zwijanie, usuwanie, wybór auta, koszt
   ui/routeSummary.ts     # dystans, czas i „Tam i z powrotem” w karcie
-  ui/fuelSettings.ts     # globalne spalanie, cena, rodzaj paliwa
-  ui/tripsSummary.ts     # podsumowanie wszystkich tras
+  ui/fuelSettings.ts     # „Auta i paliwo”: profile aut i ceny paliw w użyciu
+  ui/tripsSummary.ts     # podsumowanie wszystkich tras + podział na osoby
   ui/toast.ts            # powiadomienie „Usunięto · Cofnij”
   ui/clearAll.ts         # „Wyczyść wszystko” z potwierdzeniem
   ui/theme.ts            # motyw Auto / Jasny / Ciemny
@@ -81,7 +81,10 @@ koszt = km_łącznie × spalanie / 100 × cena
 ```
 
 - „Tam i z powrotem” podwaja dystans (zakładamy tę samą drogę powrotną).
-- Każda trasa może mieć własne spalanie (np. inne auto); puste pole = spalanie z sekcji „Paliwo”.
+- Każda trasa jedzie wybranym autem z sekcji „Auta i paliwo” (spalanie + rodzaj paliwa) albo z „własnym spalaniem” wpisanym tylko dla tej trasy.
+- Koszt trasy liczony jest ceną paliwa jej auta. Ceny podaje się tylko dla paliw, których używają auta na trasach.
+- Przystanki pośrednie (do 5 na trasę) – trasa jest wyznaczana przez wszystkie punkty w podanej kolejności.
+- Podział na osoby: kwota na osobę zaokrąglana w górę do grosza, żeby wpłaty pokryły cały koszt.
 - Suma w podsumowaniu to suma kosztów poszczególnych tras (każdy zaokrąglony do grosza), więc rozbicie zawsze się zgadza.
 - Pola liczbowe przyjmują przecinek i kropkę (`7,5` lub `7.5`).
 

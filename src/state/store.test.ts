@@ -8,6 +8,7 @@ import {
   routeName,
   ROUTE_COLORS,
   setActiveRoute,
+  setPeople,
   Store,
   updateRoute,
   updateSettings,
@@ -142,5 +143,16 @@ describe('Store', () => {
     store.update((s) => setActiveRoute(s, 'r1')); // no-op
     store.update((s) => addRoute(s));
     expect(calls).toEqual([2]);
+  });
+});
+
+describe('setPeople', () => {
+  it('clamps to 1–20 and keeps identity when unchanged', () => {
+    const state = createInitialState(ids());
+    expect(state.people).toBe(1);
+    expect(setPeople(state, 1)).toBe(state);
+    expect(setPeople(state, 4).people).toBe(4);
+    expect(setPeople(state, 0).people).toBe(1);
+    expect(setPeople(state, 50).people).toBe(20);
   });
 });

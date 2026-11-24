@@ -15,6 +15,7 @@ import {
   routeColor,
   routeName,
   setActiveRoute,
+  setPeople,
   Store,
   updateRoute,
   updateSettings,
@@ -201,6 +202,7 @@ const fuelSettings = createFuelSettings({
 const tripsSummary = createTripsSummary({
   onSelect: (id) => activate(id, true),
   onShowAll: showAll,
+  onPeopleChange: (people) => store.update((s) => setPeople(s, people)),
 });
 
 const toaster = createToaster(document.body);
@@ -295,6 +297,7 @@ function render(state: AppState): void {
     totals,
     price: validatePrice(state.settings.price),
     fuelType: state.settings.fuelType,
+    people: state.people,
   });
 }
 

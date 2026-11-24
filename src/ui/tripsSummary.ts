@@ -1,4 +1,4 @@
-import type { FieldResult, TripEvaluation, TripsSummary } from '../calc.ts';
+import { PEOPLE_RANGE, splitCost, type FieldResult, type TripEvaluation, type TripsSummary } from '../calc.ts';
 import { FUEL_LABELS, type FuelType } from '../state/store.ts';
 import { formatCurrency, formatKm, formatLiters } from '../utils/format.ts';
 import { animatedNumber } from './countUp.ts';
@@ -15,11 +15,13 @@ export interface SummaryInput {
   totals: TripsSummary;
   price: FieldResult;
   fuelType: FuelType;
+  people: number;
 }
 
 export interface TripsSummaryOptions {
   onSelect: (id: string) => void;
   onShowAll: () => void;
+  onPeopleChange: (people: number) => void;
 }
 
 export interface TripsSummaryView {
@@ -42,12 +44,24 @@ export function createTripsSummary(opts: TripsSummaryOptions): TripsSummaryView 
   body.className = 'cost-summary__body';
   body.setAttribute('aria-live', 'polite');
 
-  element.append(title, body);
+  // Persistent controls (outside the re-rendered body, so buttons keep focus).
+  const split = createSplit(opts.onPeopleChange);
+
+  const showAll = document.createElement('button');
+  showAll.type = 'button';
+  showAll.className = 'button button--secondary cost-summary__show-all';
+  showAll.textContent = 'Pokaż wszystkie trasy na mapie';
+  showAll.addEventListener('click', opts.onShowAll);
+
+  element.append(title, body, split.element, showAll);
 
   return {
     element,
 
-    update({ items, totals, price, fuelType }) {
+    update({ items, totals, price, fuelType, people }) {
+      showAll.hidden = totals.includedCount < 2;
+      split.update(totals.cost, people);
+
       if (totals.includedCount === 0) {
         element.dataset.state = 'hint';
         body.replaceChildren(text('p', 'cost-summary__hint', 'Wybierz trasę, aby policzyć koszt.'));
@@ -93,18 +107,84 @@ export function createTripsSummary(opts: TripsSummaryOptions): TripsSummaryView 
         );
       }
 
-      if (totals.includedCount > 1) {
-        const showAll = document.createElement('button');
-        showAll.type = 'button';
-        showAll.className = 'button button--secondary cost-summary__show-all';
-        showAll.textContent = 'Pokaż wszystkie trasy na mapie';
-        showAll.addEventListener('click', opts.onShowAll);
-        nodes.push(showAll);
-      }
-
       body.replaceChildren(...nodes);
     },
   };
+}
+
+/** "Liczba osób: − N +" stepper with the per-person amount. */
+function createSplit(onChange: (people: number) => void): {
+  element: HTMLElement;
+  update: (cost: number | null, people: number) => void;
+} {
+  const element = document.createElement('div');
+  element.className = 'split';
+  element.hidden = true;
+
+  const row = document.createElement('div');
+  row.className = 'split__row';
+
+  const label = text('span', 'split__label', 'Liczba osób');
+  label.id = 'split-label';
+
+  const stepper = document.createElement('div');
+  stepper.className = 'stepper';
+  stepper.setAttribute('role', 'group');
+  stepper.setAttribute('aria-labelledby', 'split-label');
+
+  const minus = stepButton('−', 'Mniej osób');
+  const plus = stepButton('+', 'Więcej osób');
+  const value = document.createElement('output');
+  value.className = 'stepper__value';
+  value.setAttribute('aria-live', 'polite');
+  stepper.append(minus, value, plus);
+  row.append(label, stepper);
+
+  const result = document.createElement('p');
+  result.className = 'split__result';
+  result.setAttribute('aria-live', 'polite');
+
+  element.append(row, result);
+
+  let current = 1;
+  minus.addEventListener('click', () => onChange(current - 1));
+  plus.addEventListener('click', () => onChange(current + 1));
+
+  return {
+    element,
+    update(cost, people) {
+      current = people;
+      element.hidden = cost === null;
+      value.textContent = String(people);
+      minus.disabled = people <= PEOPLE_RANGE.min;
+      plus.disabled = people >= PEOPLE_RANGE.max;
+      if (cost === null) return;
+
+      if (people === 1) {
+        result.replaceChildren(text('span', 'split__hint', 'Dodaj osoby, aby podzielić koszt.'));
+        return;
+      }
+      const s = splitCost(cost, people);
+      const nodes: Node[] = [
+        text('span', '', 'Na osobę: '),
+        animatedNumber('per-person', s.perPerson, formatCurrency, 'split__amount'),
+      ];
+      // Rounding up to full grosze can collect a bit more than the cost – say so.
+      if (s.collected !== cost) {
+        nodes.push(text('span', 'split__note', ` (razem ${formatCurrency(s.collected)})`));
+      }
+      result.replaceChildren(...nodes);
+    },
+  };
+}
+
+function stepButton(symbol: string, label: string): HTMLButtonElement {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'stepper__btn';
+  b.textContent = symbol;
+  b.setAttribute('aria-label', label);
+  return b;
 }
 
 function missingCostReason(price: FieldResult): string {

@@ -179,3 +179,21 @@ export function summarizeTrips(trips: TripEvaluation[]): TripsSummary {
     cost: included.length ? cost : null,
   };
 }
+
+export const PEOPLE_RANGE = { min: 1, max: 20 } as const;
+
+export interface CostSplit {
+  people: number;
+  /** Rounded UP to full grosze so the payments always cover the cost. */
+  perPerson: number;
+  /** perPerson × people – may exceed the cost by a few grosze. */
+  collected: number;
+}
+
+export function splitCost(total: number, people: number): CostSplit {
+  const n = Math.min(PEOPLE_RANGE.max, Math.max(PEOPLE_RANGE.min, Math.floor(people) || 1));
+  // Work in integer grosze to avoid float noise (e.g. 0.1 + 0.2).
+  const totalGrosze = Math.round(total * 100);
+  const perPersonGrosze = Math.ceil(totalGrosze / n);
+  return { people: n, perPerson: perPersonGrosze / 100, collected: (perPersonGrosze * n) / 100 };
+}

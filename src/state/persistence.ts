@@ -45,6 +45,7 @@ interface StoredState {
   activeRouteId: string | null;
   settings: FuelSettingsState;
   nextNumber: number;
+  people?: number;
 }
 
 /** localStorage if it is usable (a test write succeeds), otherwise null. */
@@ -85,6 +86,7 @@ export function serialize(state: AppState, withGeometry: boolean): StoredState {
     activeRouteId: state.activeRouteId,
     settings: state.settings,
     nextNumber: state.nextNumber,
+    people: state.people,
   };
 }
 
@@ -159,7 +161,9 @@ export function deserialize(raw: string | null, makeId: IdFactory = defaultIdFac
         ? routes[0]!.id
         : null;
 
-  return { routes, activeRouteId, settings: parseSettings(data.settings), nextNumber };
+  const people = Number.isInteger(data.people) ? Math.min(20, Math.max(1, data.people as number)) : 1;
+
+  return { routes, activeRouteId, settings: parseSettings(data.settings), nextNumber, people };
 }
 
 function parseRoute(item: unknown, index: number, makeId: IdFactory): TripRoute | null {

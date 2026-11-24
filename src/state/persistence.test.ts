@@ -160,3 +160,17 @@ describe('robust loading', () => {
     expect(storage.getItem(STORAGE_KEY)).toBeNull();
   });
 });
+
+describe('people count', () => {
+  it('round-trips and defaults to 1 for older or invalid data', () => {
+    const storage = new MemoryStorage();
+    saveState(storage, { ...sampleState(), people: 3 });
+    expect(loadState(storage, ids())!.people).toBe(3);
+
+    const raw = JSON.parse(storage.getItem(STORAGE_KEY)!);
+    delete raw.people;
+    expect(deserialize(JSON.stringify(raw), ids())!.people).toBe(1);
+    expect(deserialize(JSON.stringify({ ...raw, people: 'many' }), ids())!.people).toBe(1);
+    expect(deserialize(JSON.stringify({ ...raw, people: 99 }), ids())!.people).toBe(20);
+  });
+});

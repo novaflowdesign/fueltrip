@@ -57,6 +57,8 @@ export interface AppState {
   activeRouteId: string | null;
   settings: FuelSettingsState;
   nextNumber: number;
+  /** Split the total cost between this many people (1–20). */
+  people: number;
 }
 
 export const DEFAULT_SETTINGS: FuelSettingsState = { consumption: '7,5', price: '', fuelType: 'pb95' };
@@ -103,7 +105,7 @@ export const defaultIdFactory: IdFactory = () =>
 
 export function createInitialState(makeId: IdFactory = defaultIdFactory): AppState {
   const first = newRoute(1, 0, makeId());
-  return { routes: [first], activeRouteId: first.id, settings: { ...DEFAULT_SETTINGS }, nextNumber: 2 };
+  return { routes: [first], activeRouteId: first.id, settings: { ...DEFAULT_SETTINGS }, nextNumber: 2, people: 1 };
 }
 
 /** Append a new empty route, make it active and collapse the others to save space. */
@@ -170,6 +172,11 @@ export function setActiveRoute(state: AppState, id: string | null): AppState {
   if (state.activeRouteId === id) return state;
   if (id !== null && !state.routes.some((r) => r.id === id)) return state;
   return { ...state, activeRouteId: id };
+}
+
+export function setPeople(state: AppState, people: number): AppState {
+  const n = Math.min(20, Math.max(1, Math.round(people)));
+  return n === state.people ? state : { ...state, people: n };
 }
 
 export function updateSettings(state: AppState, patch: Partial<FuelSettingsState>): AppState {

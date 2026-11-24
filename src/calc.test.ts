@@ -3,6 +3,7 @@ import {
   computeTripCost,
   evaluateTrip,
   parseDecimal,
+  splitCost,
   summarizeTrips,
   tripDistance,
   validateConsumption,
@@ -204,5 +205,28 @@ describe('summarizeTrips', () => {
   it('is empty when nothing is calculated', () => {
     expect(summarizeTrips([trip(null)])).toEqual({ includedCount: 0, skippedCount: 1, totalKm: 0, liters: null, cost: null });
     expect(summarizeTrips([])).toEqual({ includedCount: 0, skippedCount: 0, totalKm: 0, liters: null, cost: null });
+  });
+});
+
+describe('splitCost', () => {
+  it('splits evenly when possible', () => {
+    expect(splitCost(100, 4)).toEqual({ people: 4, perPerson: 25, collected: 100 });
+  });
+
+  it('rounds up to full grosze so payments cover the cost', () => {
+    expect(splitCost(100, 3)).toEqual({ people: 3, perPerson: 33.34, collected: 100.02 });
+    expect(splitCost(203.46, 2)).toEqual({ people: 2, perPerson: 101.73, collected: 203.46 });
+    expect(splitCost(342.92, 3)).toEqual({ people: 3, perPerson: 114.31, collected: 342.93 });
+  });
+
+  it('is exact in grosze despite float noise', () => {
+    expect(splitCost(0.1 + 0.2, 1)).toEqual({ people: 1, perPerson: 0.3, collected: 0.3 });
+  });
+
+  it('clamps the number of people to 1–20', () => {
+    expect(splitCost(50, 0).people).toBe(1);
+    expect(splitCost(50, -3).people).toBe(1);
+    expect(splitCost(50, 99).people).toBe(20);
+    expect(splitCost(50, 2.7).people).toBe(2);
   });
 });

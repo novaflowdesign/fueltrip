@@ -1,0 +1,16 @@
+{
+  "name": "FuelTrip",
+  "short_name": "FuelTrip",
+  "description": "Policz, ile kosztuje Twoja trasa – koszt paliwa dla jednej lub kilku tras.",
+  "lang": "pl",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f6f5",
+  "theme_color": "#0f766e",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

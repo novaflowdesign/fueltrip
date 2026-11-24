@@ -1,137 +1,218 @@
-import { LngLatBounds, type ExpressionSpecification, type GeoJSONSource, type Map as MapLibreMap } from 'maplibre-gl';
+import {
+  LngLatBounds,
+  type ExpressionSpecification,
+  type GeoJSONSource,
+  type Map as MapLibreMap,
+} from 'maplibre-gl';
 
-const SOURCE_ID = 'route';
-const CASING_LAYER_ID = 'route-casing';
-const LINE_LAYER_ID = 'route-line';
-
-const LINE_COLOR = '#2563eb';
 const CASING_COLOR = '#ffffff';
 const TRANSPARENT = 'rgba(0, 0, 0, 0)';
 
 const DRAW_DURATION_MS = 1200;
 const FIT_DURATION_MS = 1500;
+const DIMMED_OPACITY = 0.3;
 
-const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
+const LINE_WIDTH: ExpressionSpecification = ['interpolate', ['linear'], ['zoom'], 5, 3.5, 12, 6, 16, 10];
+const LINE_WIDTH_ACTIVE: ExpressionSpecification = ['interpolate', ['linear'], ['zoom'], 5, 6, 12, 9, 16, 14];
+const CASING_WIDTH: ExpressionSpecification = ['interpolate', ['linear'], ['zoom'], 5, 6, 12, 10, 16, 16];
+const CASING_WIDTH_ACTIVE: ExpressionSpecification = ['interpolate', ['linear'], ['zoom'], 5, 9, 12, 14, 16, 20];
+
+interface RouteEntry {
+  geometry: GeoJSON.LineString;
+  color: string;
+  frame: number | null;
+  /** Layers exist on the map (style may not have been ready yet when the route arrived). */
+  added: boolean;
+}
 
 /**
- * Single route line drawn on the map with a "live drawing" animation:
- * a `line-gradient` step on `line-progress` reveals the line from start to end.
+ * One line per route, each in its own color, drawn with a "live drawing"
+ * animation (a `line-gradient` step on `line-progress` reveals the line).
+ * Each route gets its own source + layers so gradients and highlight work per route.
  */
-export class RouteLayer {
+export class RouteLayers {
   private readonly map: MapLibreMap;
-  private readonly ready: Promise<void>;
-  private frame: number | null = null;
-  /** Bumped on every show/clear so stale async work can bail out. */
-  private version = 0;
+  private readonly routes = new Map<string, RouteEntry>();
+  private styleReady = false;
+  private highlighted: string | null = null;
 
   constructor(map: MapLibreMap) {
     this.map = map;
-    this.ready = new Promise<void>((resolve) => {
-      if (map.isStyleLoaded()) resolve();
-      else map.once('load', () => resolve());
-    }).then(() => this.addLayers());
+    const onReady = (): void => {
+      this.styleReady = true;
+      for (const [id, entry] of this.routes) this.addToMap(id, entry, true);
+      this.applyHighlight();
+    };
+    if (map.isStyleLoaded()) onReady();
+    else map.once('load', onReady);
   }
 
-  async show(geometry: GeoJSON.LineString): Promise<void> {
-    const version = ++this.version;
-    await this.ready;
-    if (version !== this.version) return;
+  /** Show (or replace) a route's line. Same geometry object → no-op (no re-animation). */
+  set(id: string, geometry: GeoJSON.LineString | null, color: string): void {
+    const existing = this.routes.get(id);
+    if (!geometry) {
+      if (existing) this.remove(id);
+      return;
+    }
+    if (existing && existing.geometry === geometry && existing.color === color) return;
 
-    this.stopAnimation();
-    this.source().setData({ type: 'Feature', properties: {}, geometry });
-    this.fitTo(geometry);
-
-    if (prefersReducedMotion()) {
-      this.setProgress(1);
-    } else {
-      this.animateDraw();
+    if (existing) this.removeFromMap(id, existing);
+    const entry: RouteEntry = { geometry, color, frame: null, added: false };
+    this.routes.set(id, entry);
+    if (this.styleReady) {
+      this.addToMap(id, entry, true);
+      this.applyHighlight();
     }
   }
 
-  clear(): void {
-    this.version++;
-    this.stopAnimation();
-    // Layers only exist once the style is ready; before that there's nothing to clear.
-    this.map.getSource<GeoJSONSource>(SOURCE_ID)?.setData(EMPTY);
+  remove(id: string): void {
+    const entry = this.routes.get(id);
+    if (!entry) return;
+    this.removeFromMap(id, entry);
+    this.routes.delete(id);
   }
 
-  private addLayers(): void {
-    // `lineMetrics` is required for `line-progress` / `line-gradient`.
-    this.map.addSource(SOURCE_ID, { type: 'geojson', data: EMPTY, lineMetrics: true });
-
-    // Draw under the first label layer so place names stay readable on top of the route.
-    const firstSymbolId = this.map.getStyle().layers.find((layer) => layer.type === 'symbol')?.id;
-
-    this.map.addLayer(
-      {
-        id: CASING_LAYER_ID,
-        type: 'line',
-        source: SOURCE_ID,
-        layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: {
-          'line-width': ['interpolate', ['linear'], ['zoom'], 5, 6, 12, 10, 16, 16],
-          'line-gradient': gradient(CASING_COLOR, 0),
-        },
-      },
-      firstSymbolId,
-    );
-
-    this.map.addLayer(
-      {
-        id: LINE_LAYER_ID,
-        type: 'line',
-        source: SOURCE_ID,
-        layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: {
-          'line-width': ['interpolate', ['linear'], ['zoom'], 5, 3.5, 12, 6, 16, 10],
-          'line-gradient': gradient(LINE_COLOR, 0),
-        },
-      },
-      firstSymbolId,
-    );
+  /** Remove every route not listed in `keep`. */
+  retain(keep: Set<string>): void {
+    for (const id of [...this.routes.keys()]) if (!keep.has(id)) this.remove(id);
   }
 
-  private animateDraw(): void {
-    const start = performance.now();
-    const tick = (now: number): void => {
-      const t = Math.min(1, (now - start) / DRAW_DURATION_MS);
-      this.setProgress(easeInOutCubic(t));
-      this.frame = t < 1 ? requestAnimationFrame(tick) : null;
-    };
-    this.setProgress(0);
-    this.frame = requestAnimationFrame(tick);
+  has(id: string): boolean {
+    return this.routes.has(id);
   }
 
-  private stopAnimation(): void {
-    if (this.frame !== null) cancelAnimationFrame(this.frame);
-    this.frame = null;
+  /** Emphasize one route (thicker, on top) and dim the others; `null` = all equal. */
+  highlight(id: string | null): void {
+    if (this.highlighted === id) return;
+    this.highlighted = id;
+    this.applyHighlight();
   }
 
-  private setProgress(progress: number): void {
-    this.map.setPaintProperty(CASING_LAYER_ID, 'line-gradient', gradient(CASING_COLOR, progress));
-    this.map.setPaintProperty(LINE_LAYER_ID, 'line-gradient', gradient(LINE_COLOR, progress));
-  }
+  /** Fit the camera to the given routes (all routes when omitted). Returns false if nothing to fit. */
+  fit(ids?: string[]): boolean {
+    const entries = (ids ?? [...this.routes.keys()])
+      .map((id) => this.routes.get(id))
+      .filter((e): e is RouteEntry => !!e);
 
-  private fitTo(geometry: GeoJSON.LineString): void {
-    const [first, ...rest] = geometry.coordinates;
-    if (!first) return;
-    const bounds = rest.reduce(
-      (b: LngLatBounds, coord) => b.extend(coord as [number, number]),
-      new LngLatBounds(first as [number, number], first as [number, number]),
-    );
+    let bounds: LngLatBounds | null = null;
+    for (const { geometry } of entries) {
+      for (const coord of geometry.coordinates) {
+        const point = coord as [number, number];
+        bounds = bounds ? bounds.extend(point) : new LngLatBounds(point, point);
+      }
+    }
+    if (!bounds) return false;
 
     const { clientWidth, clientHeight } = this.map.getContainer();
     this.map.fitBounds(bounds, {
       padding: Math.round(Math.min(90, clientWidth * 0.15, clientHeight * 0.15)),
       duration: prefersReducedMotion() ? 0 : FIT_DURATION_MS,
     });
+    return true;
   }
 
-  private source(): GeoJSONSource {
-    const source = this.map.getSource<GeoJSONSource>(SOURCE_ID);
-    if (!source) throw new Error('Route source missing');
-    return source;
+  // ---------- internals ----------
+
+  private addToMap(id: string, entry: RouteEntry, animate: boolean): void {
+    if (entry.added) return;
+    const { source, casing, line } = layerIds(id);
+
+    // `lineMetrics` is required for `line-progress` / `line-gradient`.
+    this.map.addSource(source, {
+      type: 'geojson',
+      data: { type: 'Feature', properties: {}, geometry: entry.geometry },
+      lineMetrics: true,
+    });
+
+    const beforeId = this.firstSymbolLayerId();
+    const layout = { 'line-join': 'round', 'line-cap': 'round' } as const;
+    this.map.addLayer(
+      {
+        id: casing,
+        type: 'line',
+        source,
+        layout,
+        paint: { 'line-width': CASING_WIDTH, 'line-gradient': gradient(CASING_COLOR, 0) },
+      },
+      beforeId,
+    );
+    this.map.addLayer(
+      {
+        id: line,
+        type: 'line',
+        source,
+        layout,
+        paint: { 'line-width': LINE_WIDTH, 'line-gradient': gradient(entry.color, 0) },
+      },
+      beforeId,
+    );
+    entry.added = true;
+
+    if (animate && !prefersReducedMotion()) this.animateDraw(id, entry);
+    else this.setProgress(id, entry, 1);
   }
+
+  private removeFromMap(id: string, entry: RouteEntry): void {
+    if (entry.frame !== null) cancelAnimationFrame(entry.frame);
+    entry.frame = null;
+    if (!entry.added) return;
+    const { source, casing, line } = layerIds(id);
+    if (this.map.getLayer(line)) this.map.removeLayer(line);
+    if (this.map.getLayer(casing)) this.map.removeLayer(casing);
+    if (this.map.getSource<GeoJSONSource>(source)) this.map.removeSource(source);
+    entry.added = false;
+  }
+
+  private animateDraw(id: string, entry: RouteEntry): void {
+    const start = performance.now();
+    const tick = (now: number): void => {
+      const t = Math.min(1, (now - start) / DRAW_DURATION_MS);
+      this.setProgress(id, entry, easeInOutCubic(t));
+      entry.frame = t < 1 ? requestAnimationFrame(tick) : null;
+    };
+    this.setProgress(id, entry, 0);
+    entry.frame = requestAnimationFrame(tick);
+  }
+
+  private setProgress(id: string, entry: RouteEntry, progress: number): void {
+    if (!entry.added) return;
+    const { casing, line } = layerIds(id);
+    this.map.setPaintProperty(casing, 'line-gradient', gradient(CASING_COLOR, progress));
+    this.map.setPaintProperty(line, 'line-gradient', gradient(entry.color, progress));
+  }
+
+  private applyHighlight(): void {
+    if (!this.styleReady) return;
+    const active = this.highlighted && this.routes.has(this.highlighted) ? this.highlighted : null;
+
+    for (const [id, entry] of this.routes) {
+      if (!entry.added) continue;
+      const { casing, line } = layerIds(id);
+      const isActive = id === active;
+      const opacity = active && !isActive ? DIMMED_OPACITY : 1;
+      this.map.setPaintProperty(line, 'line-opacity', opacity);
+      this.map.setPaintProperty(casing, 'line-opacity', opacity);
+      this.map.setPaintProperty(line, 'line-width', isActive ? LINE_WIDTH_ACTIVE : LINE_WIDTH);
+      this.map.setPaintProperty(casing, 'line-width', isActive ? CASING_WIDTH_ACTIVE : CASING_WIDTH);
+    }
+
+    // Bring the highlighted route above the others (still under the labels).
+    if (active) {
+      const { casing, line } = layerIds(active);
+      const beforeId = this.firstSymbolLayerId();
+      this.map.moveLayer(casing, beforeId);
+      this.map.moveLayer(line, beforeId);
+    }
+  }
+
+  /** Draw routes under the first label layer so place names stay readable. */
+  private firstSymbolLayerId(): string | undefined {
+    return this.map.getStyle().layers.find((layer) => layer.type === 'symbol')?.id;
+  }
+}
+
+function layerIds(id: string): { source: string; casing: string; line: string } {
+  return { source: `route-${id}`, casing: `route-${id}-casing`, line: `route-${id}-line` };
 }
 
 /** Line colored up to `progress` (0–1), transparent after. */

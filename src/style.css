@@ -594,12 +594,6 @@ body {
 }
 
 /* ---------- Number fields ---------- */
-.fuel-settings__fields {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
 .number-field__box {
   position: relative;
 }
@@ -952,10 +946,6 @@ body {
   display: none;
 }
 
-.route-card__consumption {
-  margin-top: 14px;
-}
-
 .route-card__cost {
   display: flex;
   align-items: baseline;
@@ -1112,6 +1102,156 @@ body {
   min-width: 72px;
   font-weight: 700;
   text-align: right;
+}
+
+/* ---------- Cars & fuel prices ---------- */
+.car-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.car-row {
+  padding: 10px 12px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  animation: card-in 0.2s ease-out;
+}
+
+.car-row__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.car-row__name {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 8px;
+  margin-left: -8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 700;
+  text-overflow: ellipsis;
+}
+
+.car-row__name:hover {
+  background: var(--color-surface-2);
+}
+
+.car-row__name:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  background: var(--color-surface-2);
+  box-shadow: 0 0 0 3px var(--color-focus);
+}
+
+.car-row__usage {
+  flex: none;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.car-row__badge {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  color: var(--color-accent);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.car-row__remove {
+  width: 28px;
+  height: 28px;
+}
+
+.car-row__remove:hover {
+  color: var(--color-danger);
+}
+
+.car-row__fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.car-row .segmented {
+  margin: 0;
+}
+
+.car-row .segmented__option {
+  height: 36px;
+}
+
+.button--add-small {
+  height: 40px;
+  margin-top: 10px;
+}
+
+.fuel-settings__subtitle {
+  margin: 18px 0 8px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.fuel-settings__prices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.fuel-settings__prices > [hidden],
+.route-card__consumption[hidden] {
+  display: none;
+}
+
+.fuel-settings__hint {
+  margin: 6px 0 0;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+/* Native select styled to match the inputs (keeps native mobile pickers + a11y). */
+.select {
+  width: 100%;
+  height: 44px;
+  padding: 0 36px 0 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface-2);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='16' height='16'%3E%3Cpath d='m6 9 6 6 6-6' fill='none' stroke='%238a9a96' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  appearance: none;
+  cursor: pointer;
+}
+
+.select:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 4px var(--color-focus);
+}
+
+.route-card__car {
+  margin-top: 14px;
+}
+
+.route-card__car .route-card__consumption {
+  margin-top: 10px;
 }
 
 /* ---------- Cost split ---------- */

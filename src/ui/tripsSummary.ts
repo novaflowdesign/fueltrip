@@ -1,4 +1,4 @@
-import { PEOPLE_RANGE, splitCost, type FieldResult, type TripEvaluation, type TripsSummary } from '../calc.ts';
+import { PEOPLE_RANGE, splitCost, type TripEvaluation, type TripsSummary } from '../calc.ts';
 import { FUEL_LABELS, type FuelType } from '../state/store.ts';
 import { formatCurrency, formatKm, formatLiters } from '../utils/format.ts';
 import { animatedNumber } from './countUp.ts';
@@ -13,8 +13,6 @@ export interface SummaryItem {
 export interface SummaryInput {
   items: SummaryItem[];
   totals: TripsSummary;
-  price: FieldResult;
-  fuelType: FuelType;
   people: number;
 }
 
@@ -58,7 +56,7 @@ export function createTripsSummary(opts: TripsSummaryOptions): TripsSummaryView 
   return {
     element,
 
-    update({ items, totals, price, fuelType, people }) {
+    update({ items, totals, people }) {
       showAll.hidden = totals.includedCount < 2;
       split.update(totals.cost, people);
 
@@ -76,7 +74,7 @@ export function createTripsSummary(opts: TripsSummaryOptions): TripsSummaryView 
         amount.append(animatedNumber('total-cost', totals.cost, formatCurrency));
         nodes.push(amount);
       } else {
-        nodes.push(text('p', 'cost-summary__hint cost-summary__hint--block', missingCostReason(price)));
+        nodes.push(text('p', 'cost-summary__hint cost-summary__hint--block', missingCostReason(totals.fuelsMissingPrice)));
       }
 
       const details = document.createElement('dl');
@@ -87,10 +85,15 @@ export function createTripsSummary(opts: TripsSummaryOptions): TripsSummaryView 
           animatedNumber('total-km', totals.totalKm, formatKm),
         ),
       );
-      if (totals.liters !== null) {
-        const label = FUEL_LABELS[fuelType];
+      // One row per fuel used, e.g. "Paliwo Pb95 32,9 l" and "Paliwo LPG 12,4 l".
+      const fuels = Object.entries(totals.litersByFuel) as Array<[FuelType, number]>;
+      for (const [fuel, liters] of fuels) {
+        const label = FUEL_LABELS[fuel];
         details.append(
-          ...row('Paliwo', animatedNumber('total-liters', totals.liters, (l) => `${formatLiters(l)} ${label}`)),
+          ...row(
+            fuels.length > 1 ? `Paliwo ${label}` : 'Paliwo',
+            animatedNumber(`total-liters-${fuel}`, liters, (l) => (fuels.length > 1 ? formatLiters(l) : `${formatLiters(l)} ${label}`)),
+          ),
         );
       }
       nodes.push(details);
@@ -187,10 +190,10 @@ function stepButton(symbol: string, label: string): HTMLButtonElement {
   return b;
 }
 
-function missingCostReason(price: FieldResult): string {
-  if (price.status === 'empty') return 'Podaj cenę paliwa, aby zobaczyć koszt.';
-  if (price.status === 'invalid') return 'Popraw cenę paliwa w sekcji „Paliwo”.';
-  return 'Popraw spalanie, aby zobaczyć koszt.';
+function missingCostReason(fuels: FuelType[]): string {
+  if (fuels.length === 0) return 'Uzupełnij spalanie, aby zobaczyć koszt.';
+  const names = fuels.map((f) => FUEL_LABELS[f]).join(' i ');
+  return `Podaj cenę ${names} w sekcji „Auta i paliwo”, aby zobaczyć koszt.`;
 }
 
 function breakdown(items: SummaryItem[], onSelect: (id: string) => void): HTMLElement {

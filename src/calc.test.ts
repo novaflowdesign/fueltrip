@@ -125,24 +125,17 @@ describe('tripDistance', () => {
 });
 
 describe('evaluateTrip', () => {
-  const base = { distanceKm: 100, roundTrip: false, consumptionOverride: '', globalConsumption: '7,5', price: '6' };
+  const base = { distanceKm: 100, roundTrip: false, consumption: '7,5', fuelType: 'pb95' as const, price: '6' };
 
-  it('uses the global consumption when there is no override', () => {
+  it('computes liters and cost from the car consumption and its fuel price', () => {
     const e = evaluateTrip(base);
-    expect(e.consumptionSource).toBe('global');
     expect(e.liters).toBe(7.5);
     expect(e.cost).toBe(45);
+    expect(e.fuelType).toBe('pb95');
   });
 
-  it('uses the per-route override when given', () => {
-    const e = evaluateTrip({ ...base, consumptionOverride: '10' });
-    expect(e.consumptionSource).toBe('route');
-    expect(e.liters).toBe(10);
-    expect(e.cost).toBe(60);
-  });
-
-  it('reports an invalid override instead of falling back silently', () => {
-    const e = evaluateTrip({ ...base, consumptionOverride: '99' });
+  it('reports invalid consumption instead of guessing', () => {
+    const e = evaluateTrip({ ...base, consumption: '99' });
     expect(e.consumption.status).toBe('invalid');
     expect(e.liters).toBeNull();
     expect(e.cost).toBeNull();
@@ -170,11 +163,12 @@ describe('evaluateTrip', () => {
 });
 
 describe('summarizeTrips', () => {
-  const trip = (distanceKm: number | null, extra: Partial<Parameters<typeof evaluateTrip>[0]> = {}) =>
-    evaluateTrip({ distanceKm, roundTrip: false, consumptionOverride: '', globalConsumption: '7,5', price: '6,29', ...extra });
+  type Extra = Partial<Parameters<typeof evaluateTrip>[0]>;
+  const trip = (distanceKm: number | null, extra: Extra = {}) =>
+    evaluateTrip({ distanceKm, roundTrip: false, consumption: '7,5', fuelType: 'pb95', price: '6,29', ...extra });
 
   it('sums distance, liters and cost of calculated routes', () => {
-    const s = summarizeTrips([trip(118.7), trip(100, { roundTrip: true }), trip(50, { consumptionOverride: '5' })]);
+    const s = summarizeTrips([trip(118.7), trip(100, { roundTrip: true }), trip(50, { consumption: '5' })]);
     expect(s.includedCount).toBe(3);
     expect(s.totalKm).toBe(368.7); // 118.7 + 200 + 50
     expect(s.liters).toBeCloseTo(8.9025 + 15 + 2.5, 10);
@@ -182,9 +176,26 @@ describe('summarizeTrips', () => {
     expect(s.cost).toBe(166.08);
   });
 
+  it('prices every route with its own fuel and groups liters by fuel', () => {
+    const s = summarizeTrips([
+      trip(100, { consumption: '6', fuelType: 'pb95', price: '6,50' }), // 6 l × 6.50 = 39.00
+      trip(100, { consumption: '10', fuelType: 'lpg', price: '3,10' }), // 10 l × 3.10 = 31.00
+      trip(50, { consumption: '8', fuelType: 'pb95', price: '6,50' }), // 4 l × 6.50 = 26.00
+    ]);
+    expect(s.cost).toBe(96);
+    expect(s.litersByFuel).toEqual({ pb95: 10, lpg: 10 });
+    expect(s.fuelsMissingPrice).toEqual([]);
+  });
+
+  it('lists the fuels whose price is missing', () => {
+    const s = summarizeTrips([trip(100), trip(100, { fuelType: 'lpg', price: '' }), trip(null, { fuelType: 'on', price: '' })]);
+    expect(s.cost).toBeNull();
+    expect(s.fuelsMissingPrice).toEqual(['lpg']); // ON route isn't calculated yet → not needed
+  });
+
   it('adds up the displayed (rounded) per-route costs', () => {
     // each: 10 km × 5 l/100 km × 2.01 = 1.005 → 1.01; three of them → 3.03 (not 3.02 from 3.015)
-    const trips = [1, 2, 3].map(() => trip(10, { consumptionOverride: '5', price: '2,01' }));
+    const trips = [1, 2, 3].map(() => trip(10, { consumption: '5', price: '2,01' }));
     expect(summarizeTrips(trips).cost).toBe(3.03);
   });
 
@@ -195,16 +206,18 @@ describe('summarizeTrips', () => {
     expect(s.totalKm).toBe(100);
   });
 
-  it('has no total cost if any included route lacks a cost', () => {
-    const s = summarizeTrips([trip(100), trip(100, { consumptionOverride: 'abc' })]);
+  it('has no total cost or liters if any included route lacks consumption', () => {
+    const s = summarizeTrips([trip(100), trip(100, { consumption: 'abc' })]);
     expect(s.totalKm).toBe(200);
     expect(s.liters).toBeNull();
+    expect(s.litersByFuel).toEqual({});
     expect(s.cost).toBeNull();
   });
 
   it('is empty when nothing is calculated', () => {
-    expect(summarizeTrips([trip(null)])).toEqual({ includedCount: 0, skippedCount: 1, totalKm: 0, liters: null, cost: null });
-    expect(summarizeTrips([])).toEqual({ includedCount: 0, skippedCount: 0, totalKm: 0, liters: null, cost: null });
+    const empty = { includedCount: 0, totalKm: 0, liters: null, litersByFuel: {}, cost: null, fuelsMissingPrice: [] };
+    expect(summarizeTrips([trip(null)])).toEqual({ ...empty, skippedCount: 1 });
+    expect(summarizeTrips([])).toEqual({ ...empty, skippedCount: 0 });
   });
 });
 

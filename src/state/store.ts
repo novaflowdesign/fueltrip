@@ -5,7 +5,9 @@
 import type { Place } from '../services/geocoding.ts';
 import type { RouteResult } from '../services/routing.ts';
 
-export type FuelType = 'pb95' | 'on' | 'lpg';
+import type { Fuel } from '../calc.ts';
+
+export type FuelType = Fuel;
 
 export const FUEL_LABELS: Record<FuelType, string> = {
   pb95: 'Pb95',
@@ -37,7 +39,9 @@ export interface TripRoute {
   from: Place | null;
   to: Place | null;
   roundTrip: boolean;
-  /** Per-route consumption override as typed; empty → use the global setting. */
+  /** Car profile id; null = the default car; CUSTOM_CAR = one-off consumption below. */
+  carId: string | null;
+  /** Consumption typed for CUSTOM_CAR (raw input). */
   consumption: string;
   collapsed: boolean;
   status: RouteStatus;
@@ -45,23 +49,61 @@ export interface TripRoute {
   error: string | null;
 }
 
-export interface FuelSettingsState {
-  /** Raw user input (validated in calc.ts). */
+export interface CarProfile {
+  id: string;
+  name: string;
+  /** l/100 km as typed (validated in calc.ts). */
   consumption: string;
-  price: string;
   fuelType: FuelType;
+}
+
+/** Route option meaning "one-off consumption typed in the route card". */
+export const CUSTOM_CAR = 'custom';
+export const DEFAULT_CAR_ID = 'car-default';
+
+export interface FuelSettingsState {
+  /** Price per liter as typed, per fuel type – only the ones in use need a value. */
+  prices: Record<FuelType, string>;
 }
 
 export interface AppState {
   routes: TripRoute[];
   activeRouteId: string | null;
+  /** cars[0] is the default car ("Moje auto") – it can't be removed. */
+  cars: CarProfile[];
   settings: FuelSettingsState;
   nextNumber: number;
   /** Split the total cost between this many people (1–20). */
   people: number;
 }
 
-export const DEFAULT_SETTINGS: FuelSettingsState = { consumption: '7,5', price: '', fuelType: 'pb95' };
+export const DEFAULT_SETTINGS: FuelSettingsState = { prices: { pb95: '', on: '', lpg: '' } };
+
+export const DEFAULT_CAR: CarProfile = { id: DEFAULT_CAR_ID, name: 'Moje auto', consumption: '7,5', fuelType: 'pb95' };
+
+export interface ResolvedCar {
+  /** The profile used, or null for a one-off custom consumption. */
+  car: CarProfile | null;
+  consumption: string;
+  fuelType: FuelType;
+}
+
+/** Which consumption and fuel a route uses (falls back to the default car). */
+export function resolveCar(state: Pick<AppState, 'cars'>, route: Pick<TripRoute, 'carId' | 'consumption'>): ResolvedCar {
+  const defaultCar = state.cars[0] ?? DEFAULT_CAR;
+  if (route.carId === CUSTOM_CAR) {
+    return { car: null, consumption: route.consumption, fuelType: defaultCar.fuelType };
+  }
+  const car = state.cars.find((c) => c.id === route.carId) ?? defaultCar;
+  return { car, consumption: car.consumption, fuelType: car.fuelType };
+}
+
+/** Fuel types whose price is needed: those of the default car and of every route's car. */
+export function fuelsInUse(state: Pick<AppState, 'cars' | 'routes'>): FuelType[] {
+  const used = new Set<FuelType>([(state.cars[0] ?? DEFAULT_CAR).fuelType]);
+  for (const route of state.routes) used.add(resolveCar(state, route).fuelType);
+  return (Object.keys(FUEL_LABELS) as FuelType[]).filter((f) => used.has(f));
+}
 
 // ---------- Pure helpers ----------
 
@@ -82,6 +124,7 @@ function newRoute(number: number, colorIndex: number, id: string): TripRoute {
     from: null,
     to: null,
     roundTrip: false,
+    carId: null,
     consumption: '',
     collapsed: false,
     status: 'idle',
@@ -105,7 +148,14 @@ export const defaultIdFactory: IdFactory = () =>
 
 export function createInitialState(makeId: IdFactory = defaultIdFactory): AppState {
   const first = newRoute(1, 0, makeId());
-  return { routes: [first], activeRouteId: first.id, settings: { ...DEFAULT_SETTINGS }, nextNumber: 2, people: 1 };
+  return {
+    routes: [first],
+    activeRouteId: first.id,
+    cars: [{ ...DEFAULT_CAR }],
+    settings: { prices: { ...DEFAULT_SETTINGS.prices } },
+    nextNumber: 2,
+    people: 1,
+  };
 }
 
 /** Append a new empty route, make it active and collapse the others to save space. */
@@ -179,8 +229,33 @@ export function setPeople(state: AppState, people: number): AppState {
   return n === state.people ? state : { ...state, people: n };
 }
 
-export function updateSettings(state: AppState, patch: Partial<FuelSettingsState>): AppState {
-  return { ...state, settings: { ...state.settings, ...patch } };
+export function setPrice(state: AppState, fuelType: FuelType, price: string): AppState {
+  return { ...state, settings: { prices: { ...state.settings.prices, [fuelType]: price } } };
+}
+
+// ---------- Car profiles ----------
+
+/** Add a car (copying the default car's values as a starting point). */
+export function addCar(state: AppState, makeId: IdFactory = defaultIdFactory): { state: AppState; id: string } {
+  const base = state.cars[0] ?? DEFAULT_CAR;
+  const id = makeId();
+  const car: CarProfile = { id, name: `Auto ${state.cars.length + 1}`, consumption: base.consumption, fuelType: base.fuelType };
+  return { state: { ...state, cars: [...state.cars, car] }, id };
+}
+
+export function updateCar(state: AppState, id: string, patch: Partial<Omit<CarProfile, 'id'>>): AppState {
+  if (!state.cars.some((c) => c.id === id)) return state;
+  return { ...state, cars: state.cars.map((c) => (c.id === id ? { ...c, ...patch } : c)) };
+}
+
+/** Remove a car; routes that used it fall back to the default car. The default car stays. */
+export function removeCar(state: AppState, id: string): AppState {
+  if (state.cars[0]?.id === id || !state.cars.some((c) => c.id === id)) return state;
+  return {
+    ...state,
+    cars: state.cars.filter((c) => c.id !== id),
+    routes: state.routes.map((r) => (r.carId === id ? { ...r, carId: null } : r)),
+  };
 }
 
 // ---------- Minimal observable store ----------

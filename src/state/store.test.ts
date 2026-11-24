@@ -11,7 +11,14 @@ import {
   setPeople,
   Store,
   updateRoute,
-  updateSettings,
+  setPrice,
+  addCar,
+  updateCar,
+  removeCar,
+  resolveCar,
+  fuelsInUse,
+  CUSTOM_CAR,
+  DEFAULT_CAR_ID,
   type IdFactory,
 } from './store.ts';
 
@@ -26,7 +33,8 @@ describe('createInitialState', () => {
     expect(state.routes).toHaveLength(1);
     expect(state.routes[0]).toMatchObject({ id: 'r1', number: 1, name: '', collapsed: false, status: 'idle' });
     expect(state.activeRouteId).toBe('r1');
-    expect(state.settings).toEqual({ consumption: '7,5', price: '', fuelType: 'pb95' });
+    expect(state.settings).toEqual({ prices: { pb95: '', on: '', lpg: '' } });
+    expect(state.cars).toEqual([{ id: DEFAULT_CAR_ID, name: 'Moje auto', consumption: '7,5', fuelType: 'pb95' }]);
   });
 });
 
@@ -120,7 +128,7 @@ describe('removeRoute / restoreRoute', () => {
   });
 });
 
-describe('setActiveRoute / updateSettings', () => {
+describe('setActiveRoute / setPrice', () => {
   it('returns the same object when nothing changes', () => {
     const state = createInitialState(ids());
     expect(setActiveRoute(state, 'r1')).toBe(state);
@@ -128,9 +136,9 @@ describe('setActiveRoute / updateSettings', () => {
     expect(setActiveRoute(state, null).activeRouteId).toBeNull();
   });
 
-  it('merges settings', () => {
-    const state = updateSettings(createInitialState(ids()), { price: '6,29' });
-    expect(state.settings).toEqual({ consumption: '7,5', price: '6,29', fuelType: 'pb95' });
+  it('sets the price of one fuel', () => {
+    const state = setPrice(createInitialState(ids()), 'lpg', '3,19');
+    expect(state.settings.prices).toEqual({ pb95: '', on: '', lpg: '3,19' });
   });
 });
 
@@ -154,5 +162,58 @@ describe('setPeople', () => {
     expect(setPeople(state, 4).people).toBe(4);
     expect(setPeople(state, 0).people).toBe(1);
     expect(setPeople(state, 50).people).toBe(20);
+  });
+});
+
+describe('car profiles', () => {
+  it('adds, updates and removes cars; the default car stays', () => {
+    const makeId = ids();
+    let state = createInitialState(makeId);
+    const added = addCar(state, makeId);
+    state = updateCar(added.state, added.id, { name: 'Bus', consumption: '9,5', fuelType: 'on' });
+    expect(state.cars.map((c) => c.name)).toEqual(['Moje auto', 'Bus']);
+
+    expect(removeCar(state, DEFAULT_CAR_ID)).toBe(state);
+    expect(removeCar(state, added.id).cars).toHaveLength(1);
+  });
+
+  it('new cars start from the default car values', () => {
+    const makeId = ids();
+    let state = updateCar(createInitialState(makeId), DEFAULT_CAR_ID, { consumption: '6,1', fuelType: 'lpg' });
+    const { state: next, id } = addCar(state, makeId);
+    expect(next.cars.find((c) => c.id === id)).toMatchObject({ name: 'Auto 2', consumption: '6,1', fuelType: 'lpg' });
+    state = next;
+  });
+
+  it('routes using a removed car fall back to the default car', () => {
+    const makeId = ids();
+    const { state: withCar, id } = addCar(createInitialState(makeId), makeId);
+    const state = removeCar(updateRoute(withCar, 'r1', { carId: id }), id);
+    expect(state.routes[0]!.carId).toBeNull();
+  });
+
+  it('resolves the consumption and fuel a route uses', () => {
+    const makeId = ids();
+    const { state: s1, id } = addCar(createInitialState(makeId), makeId);
+    const state = updateCar(s1, id, { consumption: '9,5', fuelType: 'on' });
+    const route = state.routes[0]!;
+
+    expect(resolveCar(state, route)).toMatchObject({ consumption: '7,5', fuelType: 'pb95', car: { id: DEFAULT_CAR_ID } });
+    expect(resolveCar(state, { ...route, carId: id })).toMatchObject({ consumption: '9,5', fuelType: 'on' });
+    expect(resolveCar(state, { ...route, carId: CUSTOM_CAR, consumption: '5' })).toEqual({ car: null, consumption: '5', fuelType: 'pb95' });
+    expect(resolveCar(state, { ...route, carId: 'deleted' })).toMatchObject({ car: { id: DEFAULT_CAR_ID } });
+  });
+
+  it('needs prices only for fuels actually in use', () => {
+    const makeId = ids();
+    let state = addRoute(createInitialState(makeId), makeId);
+    expect(fuelsInUse(state)).toEqual(['pb95']);
+
+    const added = addCar(state, makeId);
+    state = updateCar(added.state, added.id, { fuelType: 'lpg' });
+    expect(fuelsInUse(state)).toEqual(['pb95']); // car exists but no route uses it
+
+    state = updateRoute(state, 'r2', { carId: added.id });
+    expect(fuelsInUse(state)).toEqual(['pb95', 'lpg']);
   });
 });

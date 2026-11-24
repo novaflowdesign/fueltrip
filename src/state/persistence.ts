@@ -6,10 +6,12 @@
 import type { Place } from '../services/geocoding.ts';
 import type { RouteResult } from '../services/routing.ts';
 import {
-  DEFAULT_SETTINGS,
+  CUSTOM_CAR,
+  DEFAULT_CAR,
   FUEL_LABELS,
   defaultIdFactory,
   type AppState,
+  type CarProfile,
   type FuelSettingsState,
   type FuelType,
   type IdFactory,
@@ -33,6 +35,7 @@ interface StoredRoute {
   from: Place | null;
   to: Place | null;
   roundTrip: boolean;
+  carId: string | null;
   consumption: string;
   collapsed: boolean;
   result: RouteResult | null;
@@ -43,6 +46,7 @@ interface StoredState {
   savedAt: string;
   routes: StoredRoute[];
   activeRouteId: string | null;
+  cars: CarProfile[];
   settings: FuelSettingsState;
   nextNumber: number;
   people?: number;
@@ -78,12 +82,14 @@ export function serialize(state: AppState, withGeometry: boolean): StoredState {
       from: r.from,
       to: r.to,
       roundTrip: r.roundTrip,
+      carId: r.carId,
       consumption: r.consumption,
       collapsed: r.collapsed,
       // Only finished routes are worth keeping; loading/error ones are recalculated on start.
       result: withGeometry && r.status === 'ready' ? r.result : null,
     })),
     activeRouteId: state.activeRouteId,
+    cars: state.cars,
     settings: state.settings,
     nextNumber: state.nextNumber,
     people: state.people,
@@ -140,10 +146,15 @@ export function deserialize(raw: string | null, makeId: IdFactory = defaultIdFac
   }
   if (!isObject(data) || data.version !== VERSION || !Array.isArray(data.routes)) return null;
 
+  // Older saves (before car profiles) had one global consumption/fuel/price in `settings`.
+  const legacy = isObject(data.settings) ? data.settings : {};
+  const cars = parseCars(data.cars, legacy);
+  const carIds = new Set(cars.map((c) => c.id));
+
   const seenIds = new Set<string>();
   const routes: TripRoute[] = [];
   data.routes.forEach((item: unknown, index: number) => {
-    const route = parseRoute(item, index, makeId);
+    const route = parseRoute(item, index, makeId, carIds);
     if (!route) return;
     if (seenIds.has(route.id)) route.id = makeId();
     seenIds.add(route.id);
@@ -163,10 +174,10 @@ export function deserialize(raw: string | null, makeId: IdFactory = defaultIdFac
 
   const people = Number.isInteger(data.people) ? Math.min(20, Math.max(1, data.people as number)) : 1;
 
-  return { routes, activeRouteId, settings: parseSettings(data.settings), nextNumber, people };
+  return { routes, activeRouteId, cars, settings: parseSettings(data.settings, cars[0]!.fuelType), nextNumber, people };
 }
 
-function parseRoute(item: unknown, index: number, makeId: IdFactory): TripRoute | null {
+function parseRoute(item: unknown, index: number, makeId: IdFactory, carIds: Set<string>): TripRoute | null {
   if (!isObject(item)) return null;
 
   const from = parsePlace(item.from);
@@ -181,6 +192,7 @@ function parseRoute(item: unknown, index: number, makeId: IdFactory): TripRoute 
     from,
     to,
     roundTrip: item.roundTrip === true,
+    carId: parseCarId(item, carIds),
     consumption: typeof item.consumption === 'string' ? item.consumption.slice(0, 20) : '',
     collapsed: item.collapsed === true,
     // Routes without a stored result but with both endpoints are recalculated on start.
@@ -219,13 +231,55 @@ function parseResult(value: unknown): RouteResult | null {
   };
 }
 
-function parseSettings(value: unknown): FuelSettingsState {
-  if (!isObject(value)) return { ...DEFAULT_SETTINGS };
-  return {
-    consumption: typeof value.consumption === 'string' ? value.consumption.slice(0, 20) : DEFAULT_SETTINGS.consumption,
-    price: typeof value.price === 'string' ? value.price.slice(0, 20) : DEFAULT_SETTINGS.price,
-    fuelType: isFuelType(value.fuelType) ? value.fuelType : DEFAULT_SETTINGS.fuelType,
-  };
+function parseCarId(item: Record<string, unknown>, carIds: Set<string>): string | null {
+  if (item.carId === CUSTOM_CAR) return CUSTOM_CAR;
+  if (typeof item.carId === 'string' && carIds.has(item.carId)) return item.carId;
+  // Legacy: a per-route consumption override becomes a one-off custom consumption.
+  if (!('carId' in item) && typeof item.consumption === 'string' && item.consumption.trim()) return CUSTOM_CAR;
+  return null;
+}
+
+function parseCars(value: unknown, legacy: Record<string, unknown>): CarProfile[] {
+  const seen = new Set<string>();
+  const cars: CarProfile[] = [];
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      if (!isObject(item) || typeof item.id !== 'string' || !item.id || seen.has(item.id)) continue;
+      seen.add(item.id);
+      cars.push({
+        id: item.id.slice(0, 100),
+        name: typeof item.name === 'string' ? item.name.slice(0, 40) : 'Auto',
+        consumption: typeof item.consumption === 'string' ? item.consumption.slice(0, 20) : DEFAULT_CAR.consumption,
+        fuelType: isFuelType(item.fuelType) ? item.fuelType : DEFAULT_CAR.fuelType,
+      });
+    }
+  }
+  if (cars.length > 0) return cars;
+
+  // No (valid) profiles → the default car, built from legacy global settings if present.
+  return [
+    {
+      ...DEFAULT_CAR,
+      consumption: typeof legacy.consumption === 'string' ? legacy.consumption.slice(0, 20) : DEFAULT_CAR.consumption,
+      fuelType: isFuelType(legacy.fuelType) ? legacy.fuelType : DEFAULT_CAR.fuelType,
+    },
+  ];
+}
+
+function parseSettings(value: unknown, defaultFuel: FuelType): FuelSettingsState {
+  const prices: Record<FuelType, string> = { pb95: '', on: '', lpg: '' };
+  if (!isObject(value)) return { prices };
+
+  if (isObject(value.prices)) {
+    for (const fuel of Object.keys(prices) as FuelType[]) {
+      const p = value.prices[fuel];
+      if (typeof p === 'string') prices[fuel] = p.slice(0, 20);
+    }
+  } else if (typeof value.price === 'string') {
+    // Legacy single price → the default car's fuel.
+    prices[defaultFuel] = value.price.slice(0, 20);
+  }
+  return { prices };
 }
 
 function isFuelType(value: unknown): value is FuelType {

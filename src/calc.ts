@@ -104,21 +104,23 @@ function plNumber(value: number): string {
   return String(value).replace('.', ',');
 }
 
+export type Fuel = 'pb95' | 'on' | 'lpg';
+
 export interface TripInput {
   /** One-way distance in km, or null when the route isn't calculated yet. */
   distanceKm: number | null;
   roundTrip: boolean;
-  /** Per-route override as typed; empty → use `globalConsumption`. */
-  consumptionOverride: string;
-  globalConsumption: string;
+  /** Consumption of the car used (raw input, l/100 km). */
+  consumption: string;
+  fuelType: Fuel;
+  /** Price of that car's fuel (raw input, zł/l). */
   price: string;
 }
 
 export interface TripEvaluation {
   distance: TripDistance | null;
-  /** Effective consumption (override if given, otherwise global). */
   consumption: FieldResult;
-  consumptionSource: 'route' | 'global';
+  fuelType: Fuel;
   price: FieldResult;
   /** Null when distance or consumption is missing/invalid. */
   liters: number | null;
@@ -128,8 +130,7 @@ export interface TripEvaluation {
 
 /** Everything the UI needs for one route card. */
 export function evaluateTrip(input: TripInput): TripEvaluation {
-  const hasOverride = input.consumptionOverride.trim() !== '';
-  const consumption = validateConsumption(hasOverride ? input.consumptionOverride : input.globalConsumption);
+  const consumption = validateConsumption(input.consumption);
   const price = validatePrice(input.price);
   const distance = input.distanceKm === null ? null : tripDistance(input.distanceKm, input.roundTrip);
 
@@ -146,7 +147,7 @@ export function evaluateTrip(input: TripInput): TripEvaluation {
     cost = price.status === 'ok' ? full.cost : null;
   }
 
-  return { distance, consumption, consumptionSource: hasOverride ? 'route' : 'global', price, liters, cost };
+  return { distance, consumption, fuelType: input.fuelType, price, liters, cost };
 }
 
 export interface TripsSummary {
@@ -157,26 +158,38 @@ export interface TripsSummary {
   totalKm: number;
   /** Null if any included route has no liters (missing/invalid consumption). */
   liters: number | null;
+  /** Liters per fuel type (only fuels that occur); empty when `liters` is null. */
+  litersByFuel: Partial<Record<Fuel, number>>;
   /**
    * Sum of the per-route costs as displayed (each rounded to grosze), so the
    * breakdown always adds up. Null if any included route has no cost.
    */
   cost: number | null;
+  /** Fuels of included routes whose price is missing or invalid. */
+  fuelsMissingPrice: Fuel[];
 }
 
 export function summarizeTrips(trips: TripEvaluation[]): TripsSummary {
   const included = trips.filter((t) => t.distance !== null);
   const sum = (values: number[]): number => values.reduce((a, b) => a + b, 0);
 
-  const liters = included.every((t) => t.liters !== null) ? sum(included.map((t) => t.liters ?? 0)) : null;
+  const allLiters = included.every((t) => t.liters !== null);
+  const litersByFuel: Partial<Record<Fuel, number>> = {};
+  if (allLiters) {
+    for (const t of included) litersByFuel[t.fuelType] = (litersByFuel[t.fuelType] ?? 0) + (t.liters ?? 0);
+  }
+
+  const fuelsMissingPrice = [...new Set(included.filter((t) => t.price.status !== 'ok').map((t) => t.fuelType))];
   const cost = included.every((t) => t.cost !== null) ? round(sum(included.map((t) => t.cost ?? 0)), 2) : null;
 
   return {
     includedCount: included.length,
     skippedCount: trips.length - included.length,
     totalKm: round(sum(included.map((t) => t.distance?.totalKm ?? 0)), 1),
-    liters: included.length ? liters : null,
+    liters: included.length && allLiters ? sum(included.map((t) => t.liters ?? 0)) : null,
+    litersByFuel: included.length ? litersByFuel : {},
     cost: included.length ? cost : null,
+    fuelsMissingPrice,
   };
 }
 

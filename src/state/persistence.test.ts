@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Place } from '../services/geocoding.ts';
 import type { RouteResult } from '../services/routing.ts';
 import { clearState, deserialize, loadState, saveState, STORAGE_KEY, type StorageLike } from './persistence.ts';
-import { addRoute, createInitialState, updateRoute, updateSettings, type AppState, type IdFactory } from './store.ts';
+import { addCar, addRoute, createInitialState, CUSTOM_CAR, DEFAULT_CAR_ID, setPrice, updateCar, updateRoute, type AppState, type IdFactory } from './store.ts';
 
 function ids(): IdFactory {
   let n = 0;
@@ -52,8 +52,11 @@ function sampleState(): AppState {
   let state = createInitialState(makeId);
   state = updateRoute(state, 'id1', { name: 'Praca', from: gliwice, to: krakow, status: 'ready', result, roundTrip: true });
   state = addRoute(state, makeId);
-  state = updateRoute(state, 'id2', { from: krakow, to: gliwice, status: 'loading', consumption: '5,5' });
-  return updateSettings(state, { price: '6,29', fuelType: 'lpg' });
+  state = updateRoute(state, 'id2', { from: krakow, to: gliwice, status: 'loading', carId: CUSTOM_CAR, consumption: '5,5' });
+  const added = addCar(state, () => 'car-bus');
+  state = updateCar(added.state, 'car-bus', { name: 'Bus', consumption: '9,5', fuelType: 'on' });
+  state = updateRoute(state, 'id1', { carId: 'car-bus' });
+  return setPrice(setPrice(state, 'pb95', '6,29'), 'on', '6,59');
 }
 
 describe('save + load round trip', () => {
@@ -73,7 +76,9 @@ describe('save + load round trip', () => {
       collapsed: true,
     });
     expect(loaded.routes[0]!.result).toEqual(result);
-    expect(loaded.settings).toEqual({ consumption: '7,5', price: '6,29', fuelType: 'lpg' });
+    expect(loaded.settings).toEqual({ prices: { pb95: '6,29', on: '6,59', lpg: '' } });
+    expect(loaded.cars.map((c) => c.name)).toEqual(['Moje auto', 'Bus']);
+    expect(loaded.routes[0]!.carId).toBe('car-bus');
     expect(loaded.activeRouteId).toBe('id2');
     expect(loaded.nextNumber).toBe(3);
   });
@@ -82,7 +87,7 @@ describe('save + load round trip', () => {
     const storage = new MemoryStorage();
     saveState(storage, sampleState());
     const second = loadState(storage, ids())!.routes[1]!;
-    expect(second).toMatchObject({ status: 'idle', result: null, consumption: '5,5', from: krakow, to: gliwice });
+    expect(second).toMatchObject({ status: 'idle', result: null, carId: CUSTOM_CAR, consumption: '5,5', from: krakow, to: gliwice });
   });
 
   it('falls back to saving without geometry when the quota is exceeded', () => {
@@ -131,7 +136,7 @@ describe('robust loading', () => {
         'garbage',
         { id: 'a', from: gliwice, to: krakow, result: { ...result, geometry: { type: 'Point' } } },
       ],
-      settings: { consumption: 7.5, price: '6,29', fuelType: 'diesel' },
+      settings: { consumption: 7.5, price: '6,29', fuelType: 'diesel' }, // legacy format, partly invalid
       nextNumber: 'x',
       activeRouteId: 'nope',
     });
@@ -148,7 +153,9 @@ describe('robust loading', () => {
     expect(second!.id).toBe('id1');
     expect(second).toMatchObject({ status: 'idle', result: null, number: 3 });
 
-    expect(state.settings).toEqual({ consumption: '7,5', price: '6,29', fuelType: 'pb95' });
+    // Invalid legacy consumption/fuel → default car values; the price goes to its fuel.
+    expect(state.cars).toEqual([{ id: DEFAULT_CAR_ID, name: 'Moje auto', consumption: '7,5', fuelType: 'pb95' }]);
+    expect(state.settings).toEqual({ prices: { pb95: '6,29', on: '', lpg: '' } });
     expect(state.nextNumber).toBe(4);
     expect(state.activeRouteId).toBeNull();
   });
@@ -172,5 +179,33 @@ describe('people count', () => {
     expect(deserialize(JSON.stringify(raw), ids())!.people).toBe(1);
     expect(deserialize(JSON.stringify({ ...raw, people: 'many' }), ids())!.people).toBe(1);
     expect(deserialize(JSON.stringify({ ...raw, people: 99 }), ids())!.people).toBe(20);
+  });
+});
+
+describe('migration from the pre-profiles format', () => {
+  it('turns global settings into the default car and per-route overrides into custom consumption', () => {
+    const legacy = {
+      version: 1,
+      routes: [
+        { id: 'a', name: 'Praca', number: 1, colorIndex: 0, from: gliwice, to: krakow, roundTrip: true, consumption: '', collapsed: false, result },
+        { id: 'b', name: '', number: 2, colorIndex: 1, from: krakow, to: gliwice, roundTrip: false, consumption: '5,5', collapsed: false, result: null },
+      ],
+      activeRouteId: 'a',
+      settings: { consumption: '6,8', price: '3,19', fuelType: 'lpg' },
+      nextNumber: 3,
+    };
+    const state = deserialize(JSON.stringify(legacy), ids())!;
+    expect(state.cars).toEqual([{ id: DEFAULT_CAR_ID, name: 'Moje auto', consumption: '6,8', fuelType: 'lpg' }]);
+    expect(state.settings.prices).toEqual({ pb95: '', on: '', lpg: '3,19' });
+    expect(state.routes.map((r) => r.carId)).toEqual([null, CUSTOM_CAR]);
+    expect(state.routes[1]!.consumption).toBe('5,5');
+    expect(state.people).toBe(1);
+  });
+
+  it('drops a carId that points to a car that no longer exists', () => {
+    const raw = JSON.stringify({ version: 1, routes: [{ id: 'a', carId: 'ghost' }], cars: [{ id: 'c1', name: 'X', consumption: '6', fuelType: 'on' }] });
+    const state = deserialize(raw, ids())!;
+    expect(state.routes[0]!.carId).toBeNull();
+    expect(state.cars).toEqual([{ id: 'c1', name: 'X', consumption: '6', fuelType: 'on' }]);
   });
 });

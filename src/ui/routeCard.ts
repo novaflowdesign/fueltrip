@@ -1,6 +1,14 @@
 import { validateConsumption, type TripEvaluation } from '../calc.ts';
 import type { Place } from '../services/geocoding.ts';
-import { routeColor, routeName, type TripRoute } from '../state/store.ts';
+import {
+  CUSTOM_CAR,
+  FUEL_LABELS,
+  routeColor,
+  routeName,
+  type CarProfile,
+  type ResolvedCar,
+  type TripRoute,
+} from '../state/store.ts';
 import { formatCurrency, formatKm, formatLiters } from '../utils/format.ts';
 import { animatedNumber } from './countUp.ts';
 import { createNumberField, type NumberField } from './fuelSettings.ts';
@@ -13,6 +21,8 @@ export interface RouteCardCallbacks {
   onRoundTripChange: (id: string, roundTrip: boolean) => void;
   onNameChange: (id: string, name: string) => void;
   onConsumptionChange: (id: string, value: string) => void;
+  /** null = default car, CUSTOM_CAR = one-off consumption, otherwise a car id. */
+  onCarChange: (id: string, carId: string | null) => void;
   onToggleCollapse: (id: string) => void;
   onRemove: (id: string) => void;
   /** `fit` = also move the map to the route. */
@@ -23,8 +33,9 @@ export interface RouteCardCallbacks {
 
 export interface RouteCardContext {
   active: boolean;
-  /** Global consumption as typed – shown as the placeholder of the override field. */
-  globalConsumption: string;
+  cars: CarProfile[];
+  /** Car (or custom consumption) this route uses. */
+  resolved: ResolvedCar;
 }
 
 const CHEVRON =
@@ -47,6 +58,8 @@ export class RouteCard {
   private animationTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly search: RouteSearch;
   private readonly summary: RouteSummary;
+  private readonly carSelect: HTMLSelectElement;
+  private carOptionsKey = '';
   private readonly consumption: NumberField;
   private readonly cost: HTMLElement;
   private lastStatusKey: unknown[] = [];
@@ -126,9 +139,27 @@ export class RouteCard {
       onRoundTripChange: (value) => cb.onRoundTripChange(this.id, value),
     });
 
+    // Car choice: profiles from "Auta i paliwo" or a one-off consumption.
+    const carField = document.createElement('div');
+    carField.className = 'field route-card__car';
+    const carLabel = document.createElement('label');
+    carLabel.className = 'field__label';
+    carLabel.htmlFor = `${prefix}-car`;
+    carLabel.textContent = 'Auto';
+    this.carSelect = document.createElement('select');
+    this.carSelect.id = `${prefix}-car`;
+    this.carSelect.className = 'select';
+    this.carSelect.addEventListener('change', () => {
+      const value = this.carSelect.value;
+      const isDefault = this.carSelect.selectedIndex === 0;
+      cb.onCarChange(this.id, value === CUSTOM_CAR ? CUSTOM_CAR : isDefault ? null : value);
+      if (value === CUSTOM_CAR) queueMicrotask(() => this.consumption.input.focus());
+    });
+    carField.append(carLabel, this.carSelect);
+
     this.consumption = createNumberField({
       id: `${prefix}-consumption`,
-      label: 'Spalanie dla tej trasy',
+      label: 'Własne spalanie',
       unit: 'l/100 km',
       placeholder: '',
       value: route.consumption,
@@ -136,12 +167,13 @@ export class RouteCard {
       onInput: (value) => cb.onConsumptionChange(this.id, value),
     });
     this.consumption.element.classList.add('route-card__consumption');
+    carField.append(this.consumption.element);
 
     this.cost = document.createElement('div');
     this.cost.className = 'route-card__cost';
     this.cost.setAttribute('aria-live', 'polite');
 
-    this.body.append(this.search.element, this.summary.element, this.consumption.element, this.cost);
+    this.body.append(this.search.element, this.summary.element, carField, this.cost);
 
     // Grid-rows trick (1fr ↔ 0fr) gives a smooth height animation for collapse/expand.
     this.bodyWrap = document.createElement('div');
@@ -179,12 +211,9 @@ export class RouteCard {
     this.compact.hidden = !route.collapsed;
     this.compact.textContent = compactLine(route, evaluation);
 
-    this.consumption.input.placeholder = ctx.globalConsumption.trim()
-      ? `domyślnie ${ctx.globalConsumption.trim()}`
-      : 'np. 7,5';
-
+    this.renderCarSelect(route, ctx);
     this.renderStatus(route);
-    this.renderCost(evaluation);
+    this.renderCost(evaluation, ctx.resolved);
   }
 
   /** While animating, clip the body; afterwards let dropdowns overflow the card again. */
@@ -226,7 +255,32 @@ export class RouteCard {
     }
   }
 
-  private renderCost(e: TripEvaluation): void {
+  private renderCarSelect(route: TripRoute, ctx: RouteCardContext): void {
+    // Rebuild options only when the car list (names/values) changed.
+    const key = JSON.stringify(ctx.cars.map((c) => [c.id, c.name, c.consumption, c.fuelType]));
+    if (key !== this.carOptionsKey) {
+      this.carOptionsKey = key;
+      const options = ctx.cars.map((car) => {
+        const option = document.createElement('option');
+        option.value = car.id;
+        option.textContent = `${car.name || 'Auto'} · ${car.consumption.trim() || '?'} l/100 km · ${FUEL_LABELS[car.fuelType]}`;
+        return option;
+      });
+      const custom = document.createElement('option');
+      custom.value = CUSTOM_CAR;
+      custom.textContent = 'Własne spalanie…';
+      this.carSelect.replaceChildren(...options, custom);
+    }
+    const value = route.carId === CUSTOM_CAR ? CUSTOM_CAR : (ctx.resolved.car?.id ?? ctx.cars[0]?.id ?? '');
+    if (this.carSelect.value !== value) this.carSelect.value = value;
+
+    const custom = route.carId === CUSTOM_CAR;
+    this.consumption.element.hidden = !custom;
+    this.consumption.setValue(route.consumption);
+    this.consumption.input.placeholder = `np. ${ctx.cars[0]?.consumption.trim() || '7,5'}`;
+  }
+
+  private renderCost(e: TripEvaluation, resolved: ResolvedCar): void {
     this.cost.hidden = !e.distance;
     if (!e.distance) return;
 
@@ -241,17 +295,17 @@ export class RouteCard {
       value.append(animatedNumber(`route-cost-${this.id}`, e.cost, formatCurrency));
       const liters = document.createElement('span');
       liters.className = 'route-card__cost-liters';
-      liters.textContent = formatLiters(e.liters);
+      liters.textContent = `${formatLiters(e.liters)} ${FUEL_LABELS[e.fuelType]}`;
       value.append(' ', liters);
       this.cost.dataset.state = 'ready';
     } else {
       this.cost.dataset.state = 'hint';
       value.textContent =
         e.consumption.status !== 'ok'
-          ? e.consumptionSource === 'route'
-            ? 'Popraw spalanie powyżej'
-            : 'Uzupełnij spalanie w sekcji „Paliwo”'
-          : 'Podaj cenę w sekcji „Paliwo”';
+          ? resolved.car
+            ? `Popraw spalanie auta „${resolved.car.name}”`
+            : 'Podaj własne spalanie powyżej'
+          : `Podaj cenę ${FUEL_LABELS[e.fuelType]} w sekcji „Auta i paliwo”`;
     }
 
     this.cost.replaceChildren(label, value);

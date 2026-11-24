@@ -1,6 +1,6 @@
 import '@fontsource-variable/manrope';
 import './style.css';
-import { evaluateTrip, summarizeTrips, validatePrice } from './calc.ts';
+import { evaluateTrip, summarizeTrips } from './calc.ts';
 import { createMap, resetView, setMapTheme } from './map/map.ts';
 import { setBottomInset } from './map/viewport.ts';
 import { EndpointMarkers } from './map/markers.ts';
@@ -18,7 +18,11 @@ import {
   setPeople,
   Store,
   updateRoute,
-  updateSettings,
+  addCar,
+  updateCar,
+  removeCar,
+  setPrice,
+  resolveCar,
   type AppState,
   type RemovedRoute,
   type TripRoute,
@@ -170,6 +174,7 @@ const callbacks: RouteCardCallbacks = {
   onRoundTripChange: (id, roundTrip) => store.update((s) => updateRoute(s, id, { roundTrip })),
   onNameChange: (id, name) => store.update((s) => updateRoute(s, id, { name })),
   onConsumptionChange: (id, consumption) => store.update((s) => updateRoute(s, id, { consumption })),
+  onCarChange: (id, carId) => store.update((s) => updateRoute(s, id, { carId })),
   onToggleCollapse: (id) => {
     const route = findRoute(id);
     if (route) store.update((s) => updateRoute(s, id, { collapsed: !route.collapsed }));
@@ -195,8 +200,22 @@ addButton.innerHTML = '<span aria-hidden="true">+</span> Dodaj trasę';
 addButton.addEventListener('click', addNewRoute);
 
 const fuelSettings = createFuelSettings({
-  initial: store.get().settings,
-  onChange: (patch) => store.update((s) => updateSettings(s, patch)),
+  onAddCar: () => {
+    const { state, id } = addCar(store.get());
+    store.update(() => state);
+    // Start editing the new car's name right away.
+    document.querySelector<HTMLInputElement>(`#car-${CSS.escape(id)}-consumption`)
+      ?.closest('.car-row')
+      ?.querySelector<HTMLInputElement>('.car-row__name')
+      ?.select();
+  },
+  onUpdateCar: (id, patch) => store.update((s) => updateCar(s, id, patch)),
+  onRemoveCar: (id) => {
+    const car = store.get().cars.find((c) => c.id === id);
+    store.update((s) => removeCar(s, id));
+    if (car) toaster.show(`Usunięto auto „${car.name}”. Trasy, które go używały, jadą teraz domyślnym autem.`);
+  },
+  onPriceChange: (fuel, value) => store.update((s) => setPrice(s, fuel, value)),
 });
 
 const tripsSummary = createTripsSummary({
@@ -218,7 +237,6 @@ function clearEverything(): void {
 
   const fresh = createInitialState();
   store.update(() => fresh);
-  fuelSettings.setValues(fresh.settings);
   // Drop the save scheduled by the update above – storage stays empty until the next real change.
   saveNow.cancel();
   if (storage) clearState(storage);
@@ -251,22 +269,27 @@ function render(state: AppState): void {
     if (current !== card.element) routeList.insertBefore(card.element, current ?? null);
   });
 
-  const evaluations = state.routes.map((route) =>
+  // Each route is priced with its own car's consumption and that car's fuel price.
+  const resolved = state.routes.map((route) => resolveCar(state, route));
+  const evaluations = state.routes.map((route, i) =>
     evaluateTrip({
       distanceKm: route.status === 'ready' && route.result ? route.result.distanceMeters / 1000 : null,
       roundTrip: route.roundTrip,
-      consumptionOverride: route.consumption,
-      globalConsumption: state.settings.consumption,
-      price: state.settings.price,
+      consumption: resolved[i]!.consumption,
+      fuelType: resolved[i]!.fuelType,
+      price: state.settings.prices[resolved[i]!.fuelType],
     }),
   );
 
   state.routes.forEach((route, i) => {
     cards.get(route.id)?.update(route, evaluations[i]!, {
       active: multiple && route.id === state.activeRouteId,
-      globalConsumption: state.settings.consumption,
+      cars: state.cars,
+      resolved: resolved[i]!,
     });
   });
+
+  fuelSettings.update(state);
 
   // Map: one colored line + A/B markers per route.
   routeLayers.retain(ids);
@@ -295,8 +318,6 @@ function render(state: AppState): void {
       evaluation: evaluations[i]!,
     })),
     totals,
-    price: validatePrice(state.settings.price),
-    fuelType: state.settings.fuelType,
     people: state.people,
   });
 }

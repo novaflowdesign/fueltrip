@@ -4,12 +4,14 @@ import {
   type GeoJSONSource,
   type Map as MapLibreMap,
 } from 'maplibre-gl';
+import { framePadding, prefersReducedMotion } from './viewport.ts';
 
 const CASING_COLOR = '#ffffff';
 const TRANSPARENT = 'rgba(0, 0, 0, 0)';
 
 const DRAW_DURATION_MS = 1200;
 const FIT_DURATION_MS = 1500;
+
 const DIMMED_OPACITY = 0.3;
 
 const LINE_WIDTH: ExpressionSpecification = ['interpolate', ['linear'], ['zoom'], 5, 3.5, 12, 6, 16, 10];
@@ -38,13 +40,25 @@ export class RouteLayers {
 
   constructor(map: MapLibreMap) {
     this.map = map;
-    const onReady = (): void => {
+    let firstStyle = true;
+
+    // A new style (theme switch) wipes our sources/layers – re-add them, without re-animating.
+    const onStyleLoad = (): void => {
       this.styleReady = true;
-      for (const [id, entry] of this.routes) this.addToMap(id, entry, true);
+      for (const [id, entry] of this.routes) {
+        if (entry.frame !== null) cancelAnimationFrame(entry.frame);
+        entry.frame = null;
+        entry.added = false;
+        this.addToMap(id, entry, firstStyle);
+      }
+      firstStyle = false;
       this.applyHighlight();
     };
-    if (map.isStyleLoaded()) onReady();
-    else map.once('load', onReady);
+    map.on('style.load', onStyleLoad);
+    map.on('styledataloading', () => {
+      this.styleReady = false;
+    });
+    if (map.isStyleLoaded()) onStyleLoad();
   }
 
   /** Show (or replace) a route's line. Same geometry object → no-op (no re-animation). */
@@ -103,9 +117,8 @@ export class RouteLayers {
     }
     if (!bounds) return false;
 
-    const { clientWidth, clientHeight } = this.map.getContainer();
     this.map.fitBounds(bounds, {
-      padding: Math.round(Math.min(90, clientWidth * 0.15, clientHeight * 0.15)),
+      padding: framePadding(this.map),
       duration: prefersReducedMotion() ? 0 : FIT_DURATION_MS,
     });
     return true;
@@ -205,9 +218,18 @@ export class RouteLayers {
     }
   }
 
-  /** Draw routes under the first label layer so place names stay readable. */
+  /**
+   * Insert routes right before the trailing block of label layers: above roads,
+   * bridges and borders, but under place names. (Styles differ – Liberty has a few
+   * symbol layers early on, the dark style even before its roads.)
+   */
   private firstSymbolLayerId(): string | undefined {
-    return this.map.getStyle().layers.find((layer) => layer.type === 'symbol')?.id;
+    const layers = this.map.getStyle().layers;
+    let lastNonSymbol = -1;
+    layers.forEach((layer, i) => {
+      if (layer.type !== 'symbol' && !layer.id.startsWith('route-')) lastNonSymbol = i;
+    });
+    return layers.slice(lastNonSymbol + 1).find((layer) => !layer.id.startsWith('route-'))?.id;
   }
 }
 
@@ -226,6 +248,3 @@ function easeInOutCubic(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
 }
 
-function prefersReducedMotion(): boolean {
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}

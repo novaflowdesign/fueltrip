@@ -1,5 +1,6 @@
 import { LngLatBounds, Marker, type Map as MapLibreMap } from 'maplibre-gl';
 import type { Place } from '../services/geocoding.ts';
+import { centerOffset, framePadding, prefersReducedMotion } from './viewport.ts';
 
 type Endpoint = 'start' | 'end';
 
@@ -69,9 +70,8 @@ export class EndpointMarkers {
 
     if (start && end) {
       const bounds = new LngLatBounds([start.lon, start.lat], [start.lon, start.lat]).extend([end.lon, end.lat]);
-      const { clientWidth, clientHeight } = this.map.getContainer();
       this.map.fitBounds(bounds, {
-        padding: Math.round(Math.min(90, clientWidth * 0.15, clientHeight * 0.15)),
+        padding: framePadding(this.map),
         maxZoom: 14,
         duration: animate ? FLY_DURATION_MS : 0,
       });
@@ -83,9 +83,11 @@ export class EndpointMarkers {
     const options = {
       center: [single.lon, single.lat] as [number, number],
       zoom: Math.max(this.map.getZoom(), SINGLE_PLACE_ZOOM),
+      // Keep the place centered in the part of the map not covered by the mobile sheet.
+      offset: centerOffset(),
     };
-    if (animate) this.map.flyTo({ ...options, duration: FLY_DURATION_MS });
-    else this.map.jumpTo(options);
+    // flyTo with duration 0 (not jumpTo) so the offset is honored with reduced motion too.
+    this.map.flyTo({ ...options, duration: animate ? FLY_DURATION_MS : 0 });
     return true;
   }
 
@@ -121,10 +123,12 @@ function createMarkerElement(kind: Endpoint, place: Place, color: string): HTMLE
   label.textContent = kind === 'start' ? 'A' : 'B';
 
   pin.append(label);
-  wrapper.append(pin);
+
+  // One-off ripple under the pin when it appears.
+  const pulse = document.createElement('div');
+  pulse.className = 'route-marker__pulse';
+
+  wrapper.append(pulse, pin);
   return wrapper;
 }
 
-function prefersReducedMotion(): boolean {
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}

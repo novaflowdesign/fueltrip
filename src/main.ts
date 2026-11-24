@@ -1,6 +1,8 @@
+import '@fontsource-variable/manrope';
 import './style.css';
 import { evaluateTrip, summarizeTrips, validatePrice } from './calc.ts';
-import { createMap, resetView } from './map/map.ts';
+import { createMap, resetView, setMapTheme } from './map/map.ts';
+import { setBottomInset } from './map/viewport.ts';
 import { EndpointMarkers } from './map/markers.ts';
 import { RouteLayers } from './map/routeLayer.ts';
 import { searchPlaces, type Place } from './services/geocoding.ts';
@@ -21,20 +23,43 @@ import {
   type TripRoute,
 } from './state/store.ts';
 import { clearState, getStorage, loadState, saveState } from './state/persistence.ts';
+import { createBottomSheet } from './ui/bottomSheet.ts';
 import { createClearAll } from './ui/clearAll.ts';
+import { forgetNumber } from './ui/countUp.ts';
 import { createFuelSettings } from './ui/fuelSettings.ts';
 import { RouteCard, type RouteCardCallbacks } from './ui/routeCard.ts';
+import { createThemeSwitch } from './ui/theme.ts';
 import { createToaster } from './ui/toast.ts';
 import { createTripsSummary } from './ui/tripsSummary.ts';
 import { debounce } from './utils/debounce.ts';
+import { formatCurrency, formatKm } from './utils/format.ts';
 
-const mapContainer = document.getElementById('map');
-const panelBody = document.getElementById('panel-body');
-if (!mapContainer || !panelBody) {
-  throw new Error('Missing #map or #panel-body container');
-}
+const byId = <T extends HTMLElement>(id: string): T => {
+  const el = document.getElementById(id);
+  if (!el) throw new Error(`Missing #${id}`);
+  return el as T;
+};
+const mapContainer = byId('map');
+const panel = byId('panel');
+const panelHeader = byId('panel-header');
+const panelBody = byId('panel-body');
+const sheetPeek = byId('sheet-peek');
 
-const map = createMap(mapContainer);
+// Theme first, so the map starts with the matching style.
+const themeSwitch = createThemeSwitch((theme) => setMapTheme(map, theme));
+byId('theme-slot').append(themeSwitch.element);
+
+const map = createMap(mapContainer, themeSwitch.current());
+// Dev-only handle for debugging in the browser console / automated checks.
+if (import.meta.env.DEV) (window as unknown as { __map: typeof map }).__map = map;
+
+// On phones the panel is a bottom sheet over the map; camera moves keep routes above it.
+createBottomSheet({
+  panel,
+  header: panelHeader,
+  handle: byId<HTMLButtonElement>('sheet-handle'),
+  onInsetChange: setBottomInset,
+});
 const markers = new EndpointMarkers(map);
 const routeLayers = new RouteLayers(map);
 const routing: RoutingProvider = new OsrmRoutingProvider();
@@ -211,6 +236,7 @@ function render(state: AppState): void {
     if (!ids.has(id)) {
       card.element.remove();
       cards.delete(id);
+      for (const key of [`route-cost-${id}`, `route-${id}-km`, `route-${id}-min`]) forgetNumber(key);
     }
   }
   state.routes.forEach((route, index) => {
@@ -250,6 +276,15 @@ function render(state: AppState): void {
   }
   applyHighlight(state);
 
+  const totals = summarizeTrips(evaluations);
+  sheetPeek.textContent =
+    totals.includedCount === 0
+      ? 'Dodaj trasę, aby policzyć koszt'
+      : [
+          totals.cost !== null ? `Łącznie ${formatCurrency(totals.cost)}` : 'Podaj cenę paliwa',
+          formatKm(totals.totalKm),
+        ].join(' · ');
+
   tripsSummary.update({
     items: state.routes.map((route, i) => ({
       id: route.id,
@@ -257,7 +292,7 @@ function render(state: AppState): void {
       color: routeColor(route),
       evaluation: evaluations[i]!,
     })),
-    totals: summarizeTrips(evaluations),
+    totals,
     price: validatePrice(state.settings.price),
     fuelType: state.settings.fuelType,
   });

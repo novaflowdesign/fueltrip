@@ -4,20 +4,36 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="FuelTrip – policz, ile kosztuje Twoja trasa." />
-    <meta name="theme-color" content="#0f766e" />
+    <meta name="theme-color" content="#ffffff" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <title>FuelTrip</title>
+    <script>
+      // Apply the saved theme before first paint (no flash of the wrong theme).
+      try {
+        var theme = localStorage.getItem('fueltrip:theme');
+        if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div class="app">
-      <aside class="panel" aria-label="Panel planowania trasy">
-        <header class="panel__header">
-          <h1 class="brand">FuelTrip</h1>
-          <p class="panel__subtitle">Policz, ile kosztuje Twoja trasa</p>
+      <aside class="panel" id="panel" aria-label="Panel planowania trasy">
+        <header class="panel__header" id="panel-header">
+          <button class="sheet-handle" id="sheet-handle" type="button" aria-controls="panel-body">
+            <span class="sheet-handle__bar" aria-hidden="true"></span>
+          </button>
+          <div class="panel__title-row">
+            <div>
+              <h1 class="brand">FuelTrip</h1>
+              <p class="panel__subtitle">Policz, ile kosztuje Twoja trasa</p>
+            </div>
+            <div id="theme-slot"></div>
+          </div>
+          <p class="sheet-peek" id="sheet-peek"></p>
         </header>
-        <div class="panel__body" id="panel-body">
-          <!-- Route search, route list, settings and summary come in later stages. -->
-        </div>
+        <div class="panel__body" id="panel-body"></div>
       </aside>
       <main class="map-wrap">
         <div id="map" class="map" role="region" aria-label="Mapa"></div>

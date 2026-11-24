@@ -10,20 +10,26 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 // MapLibre resolves its worker as "./maplibre-gl-worker.mjs" next to its own module.
 // After bundling that file doesn't exist, so emit it as an asset and point MapLibre at it.
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
+import { centerOffset, prefersReducedMotion } from './viewport.ts';
 
 setWorkerUrl(workerUrl);
 
-/** OpenFreeMap vector style – free, no API key required. */
-export const MAP_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';
+/** OpenFreeMap vector styles – free, no API key required. */
+export const MAP_STYLES = {
+  light: 'https://tiles.openfreemap.org/styles/liberty',
+  dark: 'https://tiles.openfreemap.org/styles/dark',
+} as const;
+
+export type MapTheme = keyof typeof MAP_STYLES;
 
 /** Initial view: whole of Poland. */
 const INITIAL_CENTER: [number, number] = [19.4, 52.0];
 const INITIAL_ZOOM = 5.6;
 
-export function createMap(container: HTMLElement): MapLibreMap {
+export function createMap(container: HTMLElement, theme: MapTheme): MapLibreMap {
   const map = new MapLibreMap({
     container,
-    style: MAP_STYLE_URL,
+    style: MAP_STYLES[theme],
     center: INITIAL_CENTER,
     zoom: INITIAL_ZOOM,
     // We add our own (always visible) attribution control below.
@@ -34,7 +40,11 @@ export function createMap(container: HTMLElement): MapLibreMap {
   map.addControl(new NavigationControl({ visualizePitch: true }), 'top-right');
   map.addControl(new ScaleControl({ unit: 'metric' }), 'bottom-right');
   // OpenFreeMap style already carries the OSM + OpenFreeMap attribution text.
-  map.addControl(new AttributionControl({ compact: false }), 'bottom-right');
+  // Full text on wide screens; on phones MapLibre's compact "i" version (shown expanded at start).
+  map.addControl(
+    new AttributionControl({ compact: window.matchMedia('(max-width: 760px)').matches }),
+    'bottom-right',
+  );
 
   map.on('style.load', () => localizeLabels(map));
 
@@ -46,10 +56,21 @@ export function createMap(container: HTMLElement): MapLibreMap {
   return map;
 }
 
+/** Swap the base map between light and dark (route layers re-add themselves on `style.load`). */
+export function setMapTheme(map: MapLibreMap, theme: MapTheme): void {
+  map.setStyle(MAP_STYLES[theme], { diff: false });
+}
+
 /** Fly back to the initial overview of Poland. */
 export function resetView(map: MapLibreMap): void {
-  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  map.flyTo({ center: INITIAL_CENTER, zoom: INITIAL_ZOOM, bearing: 0, pitch: 0, duration: reduced ? 0 : 1200 });
+  map.flyTo({
+    center: INITIAL_CENTER,
+    zoom: INITIAL_ZOOM,
+    bearing: 0,
+    pitch: 0,
+    offset: centerOffset(),
+    duration: prefersReducedMotion() ? 0 : 1200,
+  });
 }
 
 /**
